@@ -27,6 +27,8 @@
         <swagger>1.5.22</swagger>
         <s3>2.20.0</s3>
         <jjwt>0.12.6</jjwt>
+        <fastjson>1.2.76</fastjson>
+        <pagehelper>6.1.0</pagehelper>
     </properties>
     <modules>
         <module>server</module>
@@ -96,6 +98,18 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-jackson</artifactId>
                 <version>${jjwt}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>fastjson</artifactId>
+                <version>${fastjson}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.pagehelper</groupId>
+                <artifactId>pagehelper</artifactId>
+                <version>${pagehelper}</version>
             </dependency>
 
         </dependencies>

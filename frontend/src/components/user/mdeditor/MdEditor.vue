@@ -16,6 +16,7 @@ import MainEditor from '@/components/user/mdeditor/MainEditor.vue';
 .editor-page {
   max-width: 960px;
   margin: 0 auto;
+  padding: 24px 0;
 }
 
 .page-header {
@@ -24,13 +25,13 @@ import MainEditor from '@/components/user/mdeditor/MainEditor.vue';
 
 .page-header h2 {
   font-size: 24px;
-  font-weight: 600;
-  color: #1a1a2e;
+  font-weight: 700;
+  color: var(--c-text);
   margin-bottom: 6px;
 }
 
 .page-header p {
   font-size: 14px;
-  color: #999;
+  color: var(--c-text-muted);
 }
 </style>

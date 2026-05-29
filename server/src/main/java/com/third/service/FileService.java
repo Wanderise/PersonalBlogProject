@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -17,6 +19,8 @@ import java.time.Duration;
 public class FileService {
     @Autowired
     private S3Presigner s3Presigner;
+    @Autowired
+    private S3Client s3Client;
 
     @Value("${r2.bucket}")
     private String bucketName;
@@ -47,5 +51,13 @@ public class FileService {
                 .getObjectRequest(getObjectRequest)
                 .build();
         return s3Presigner.presignGetObject(presignRequest).url().toString();
+    }
+
+    public void deleteObject(String objectKey) {
+        DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(objectKey)
+                .build();
+        s3Client.deleteObject(deleteObjectRequest);
     }
 }

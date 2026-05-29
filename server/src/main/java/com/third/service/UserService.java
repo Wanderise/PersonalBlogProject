@@ -13,5 +13,5 @@ public interface UserService {
 
     UserVO updateUserInfo(UserDTO userDTO);
 
-    UserVO updateUserAvatar(UserDTO userDTO);
+    void updateUserAvatar(UserDTO userDTO);
 }

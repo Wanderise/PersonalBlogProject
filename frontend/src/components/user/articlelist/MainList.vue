@@ -1,108 +1,135 @@
-<script setup>
-import { onMounted, ref, computed } from "vue"
-import { Search } from '@element-plus/icons-vue'
-import { getArticleList } from "@/api/article.js"
-
-const searchKey = ref('')
-const list = ref([])
-
-const filteredList = computed(() => {
-  if (!searchKey.value.trim()) return list.value
-  const keyword = searchKey.value.toLowerCase()
-  return list.value.filter(item =>
-    (item.title && item.title.toLowerCase().includes(keyword)) ||
-    (item.content && item.content.toLowerCase().includes(keyword))
-  )
-})
-
-const fetchData = async () => {
-  try {
-    const res = await getArticleList()
-    list.value = res.data
-  } catch (error) {
-    console.log(error)
-  }
-}
-
-onMounted(() => {
-  fetchData()
-})
-
-function stripMarkdown(text) {
-  if (!text) return ''
-  return text
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-    .replace(/!\[.*?\]\(.*?\)/g, '')
-    .replace(/>\s/g, '')
-    .replace(/[-*+]\s/g, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-    .substring(0, 200)
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-</script>
-
 <template>
   <div class="list-page">
     <div class="page-header">
       <h2>文章列表</h2>
       <el-input
-        v-model="searchKey"
-        placeholder="搜索文章标题或内容..."
+        v-model="keyword"
+        placeholder="搜索文章..."
         :prefix-icon="Search"
         class="search-input"
         clearable
+        @input="onSearch"
       />
     </div>
 
-    <div v-if="filteredList.length === 0" class="empty-state">
-      <p>暂无文章</p>
+    <div class="tag-filter" v-if="allTags.length">
+      <el-tag
+        v-for="tag in allTags"
+        :key="tag"
+        :type="selectedTag === tag ? 'primary' : 'info'"
+        :effect="selectedTag === tag ? 'dark' : 'plain'"
+        size="large"
+        class="filter-tag"
+        @click="selectTag(tag)"
+      >
+        {{ tag }}
+      </el-tag>
+      <el-button v-if="selectedTag" size="small" text @click="selectTag('')">清除筛选</el-button>
+    </div>
+
+    <div v-if="loading" class="loading-area">
+      <el-skeleton :rows="3" animated />
+    </div>
+
+    <div v-else-if="list.length === 0" class="empty-state">
+      <el-empty description="暂无文章" />
     </div>
 
     <div v-else class="card-grid">
-      <el-card
-        v-for="item in filteredList"
+      <ArticleCard
+        v-for="item in list"
         :key="item.id"
-        class="article-card"
-        shadow="hover"
-      >
-        <template #header>
-          <div class="card-header">
-            <h3 class="card-title">{{ item.title || '无标题' }}</h3>
-            <span class="card-date">{{ formatDate(item.gmtCreate) }}</span>
-          </div>
-        </template>
-        <p class="card-content">{{ stripMarkdown(item.content) }}</p>
-        <div class="card-tags" v-if="item.tag && item.tag.length">
-          <el-tag
-            v-for="tag in item.tag"
-            :key="tag"
-            size="small"
-            class="tag-item"
-            type="info"
-          >
-            {{ tag }}
-          </el-tag>
-        </div>
-      </el-card>
+        :article="item"
+        :cover-url="item.imageUrls && item.imageUrls[0]"
+        @click="viewArticle(item.id)"
+      />
+    </div>
+
+    <div class="pagination" v-if="total > pageSize">
+      <el-pagination
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="total"
+        layout="prev, pager, next"
+        @current-change="fetchData"
+        background
+      />
     </div>
   </div>
 </template>
 
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
+import { getArticleList } from '@/api/article.js'
+import ArticleCard from '@/components/user/articlelist/ArticleCard.vue'
+
+const router = useRouter()
+const list = ref([])
+const loading = ref(true)
+const keyword = ref('')
+const selectedTag = ref('')
+const currentPage = ref(1)
+const total = ref(0)
+const pageSize = 12
+
+let searchTimer = null
+
+const allTags = computed(() => {
+  const tags = new Set()
+  list.value.forEach(item => {
+    if (item.tag && Array.isArray(item.tag)) {
+      item.tag.forEach(t => tags.add(t))
+    }
+  })
+  return [...tags].sort()
+})
+
+onMounted(() => fetchData())
+
+async function fetchData() {
+  loading.value = true
+  try {
+    const params = { page: currentPage.value, size: pageSize }
+    if (keyword.value.trim()) params.keyword = keyword.value.trim()
+    if (selectedTag.value) params.tag = selectedTag.value
+    const res = await getArticleList(params)
+    const body = res.data
+    if (Array.isArray(body)) {
+      list.value = body
+      total.value = body.length
+    } else {
+      list.value = body.articles || []
+      total.value = body.total || 0
+    }
+  } catch {
+    ElMessage.error('加载文章失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function selectTag(tag) {
+  selectedTag.value = selectedTag.value === tag ? '' : tag
+  currentPage.value = 1
+  fetchData()
+}
+
+function onSearch() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { currentPage.value = 1; fetchData() }, 300)
+}
+
+function viewArticle(id) {
+  router.push(`/article/${id}`)
+}
+</script>
+
 <style scoped>
 .list-page {
-  max-width: 960px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -117,73 +144,49 @@ function formatDate(dateStr) {
 .page-header h2 {
   font-size: 24px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--c-text);
   flex-shrink: 0;
+  margin: 0;
 }
 
 .search-input {
-  max-width: 320px;
+  max-width: 300px;
 }
 
-.card-grid {
+.tag-filter {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
 }
 
-.article-card {
-  border-radius: 10px;
-  transition: transform 0.15s;
+.filter-tag {
+  cursor: pointer;
+  transition: all var(--transition);
 }
 
-.article-card:hover {
+.filter-tag:hover {
   transform: translateY(-1px);
 }
 
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
 }
 
-.card-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: #1a1a2e;
-}
-
-.card-date {
-  font-size: 12px;
-  color: #999;
-  flex-shrink: 0;
-  margin-left: 16px;
-}
-
-.card-content {
-  font-size: 14px;
-  color: #666;
-  line-height: 1.7;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.card-tags {
-  margin-top: 14px;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.tag-item {
-  border-radius: 4px;
+.loading-area {
+  padding: 40px 0;
 }
 
 .empty-state {
-  text-align: center;
-  padding: 80px 20px;
-  color: #bbb;
-  font-size: 16px;
+  padding: 80px 0;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 36px;
 }
 </style>

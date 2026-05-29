@@ -1,43 +1,21 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth.js'
 
 const router = useRouter()
-const route = useRoute()
-const isLoggedIn = ref(false)
-const userName = ref('')
+const { state, loadAvatar, clearAuth } = useAuth()
 
-const updateAuthState = () => {
-  const token = localStorage.getItem('token')
-  isLoggedIn.value = !!token
-  if (token) {
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      userName.value = user.name || '用户'
-    } catch {
-      userName.value = '用户'
-    }
-  }
+onMounted(() => {
+  loadAvatar()
+})
+
+function handleToProfile() {
+  router.push(`/User/${state.user.id || 1}/profile`)
 }
 
-watch(
-  () => route.fullPath,
-  () => {
-    updateAuthState()
-  },
-  { immediate: true }
-)
-
-const handleToProfile = () => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}')
-  router.push(`/User/${user.id || 1}/profile`)
-}
-
-const handleLogout = () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
-  isLoggedIn.value = false
-  userName.value = ''
+function handleLogout() {
+  clearAuth()
   router.push('/login')
 }
 </script>
@@ -47,15 +25,22 @@ const handleLogout = () => {
     <div class="header-inner">
       <router-link to="/" class="site-name">个人博客</router-link>
 
-      <nav class="header-nav" v-if="isLoggedIn">
+      <nav class="header-nav" v-if="state.isLoggedIn">
         <router-link to="/User/1/home">首页</router-link>
-        <router-link to="/User/1/editor">写文章</router-link>
-        <router-link to="/User/1/list">文章列表</router-link>
+        <router-link to="/User/1/list">发现</router-link>
+        <router-link to="/User/1/articles">我的文章</router-link>
         <el-dropdown trigger="click" class="user-dropdown">
-          <span class="user-avatar">{{ userName.charAt(0) }}</span>
+          <el-avatar
+            v-if="state.avatarUrl"
+            :size="32"
+            :src="state.avatarUrl"
+            class="user-avatar-img"
+          />
+          <span v-else class="user-avatar">{{ state.userName.charAt(0) }}</span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="handleToProfile">查看个人信息</el-dropdown-item>
+              <el-dropdown-item @click="handleToProfile">个人信息</el-dropdown-item>
+              <el-dropdown-item @click="router.push('/User/1/articles')">我的文章</el-dropdown-item>
               <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -75,9 +60,9 @@ const handleLogout = () => {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: #fff;
-  border-bottom: 1px solid #e8eaed;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--c-border);
 }
 
 .header-inner {
@@ -93,54 +78,55 @@ const handleLogout = () => {
 .site-name {
   font-size: 20px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--c-text);
   text-decoration: none;
-  letter-spacing: 1px;
+  letter-spacing: -0.01em;
 }
 
 .header-nav {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
 }
 
 .header-nav a {
-  padding: 6px 16px;
-  border-radius: 6px;
-  color: #555;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--c-text-secondary);
   text-decoration: none;
   font-size: 14px;
-  transition: all 0.2s;
+  font-weight: 500;
+  transition: all var(--transition);
 }
 
 .header-nav a:hover {
-  background: #f0f2f5;
-  color: #409eff;
+  background: var(--c-primary-light);
+  color: var(--c-primary);
 }
 
 .header-nav a.router-link-active {
-  background: #e8f0fe;
-  color: #409eff;
-  font-weight: 500;
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  font-weight: 600;
 }
 
 .register-link {
-  background: #409eff !important;
+  background: var(--c-primary) !important;
   color: #fff !important;
 }
 
 .register-link:hover {
-  background: #337ecc !important;
+  background: var(--c-primary-dark) !important;
   color: #fff !important;
 }
 
 .register-link.router-link-active {
-  background: #409eff !important;
+  background: var(--c-primary) !important;
   color: #fff !important;
 }
 
 .user-dropdown {
-  margin-left: 12px;
+  margin-left: 8px;
 }
 
 .user-avatar {
@@ -150,15 +136,20 @@ const handleLogout = () => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #409eff;
+  background: var(--c-primary);
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition);
 }
 
-.user-avatar:hover {
-  opacity: 0.85;
+.user-avatar:hover { opacity: 0.85; }
+
+.user-avatar-img {
+  cursor: pointer;
+  transition: opacity var(--transition);
 }
+
+.user-avatar-img:hover { opacity: 0.85; }
 </style>

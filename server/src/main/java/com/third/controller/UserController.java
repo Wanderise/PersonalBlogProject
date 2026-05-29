@@ -49,10 +49,10 @@ public class UserController {
     }
 
     @PutMapping("/avatar")
-    public Result<UserVO> updateUserAvatar(@RequestBody UserDTO userDTO) {
+    public Result updateUserAvatar(@RequestBody UserDTO userDTO) {
         log.info("userDTO={}", userDTO);
-        UserVO userVO = userService.updateUserAvatar(userDTO);
-        return Result.success(userVO);
+        userService.updateUserAvatar(userDTO);
+        return Result.success();
     }
 
 }

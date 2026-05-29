@@ -11,6 +11,7 @@ import com.third.pojo.dto.UserDTO;
 import com.third.pojo.entity.User;
 import com.third.pojo.vo.UserLoginVO;
 import com.third.pojo.vo.UserVO;
+import com.third.service.FileService;
 import com.third.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -28,6 +29,8 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private UserMapper userMapper;
+    @Autowired
+    private FileService fileService;
 
     @Override
     public void register(UserDTO user) {
@@ -73,7 +76,7 @@ public class UserServiceImpl implements UserService {
         User user = userMapper.getUserInfoById(userId);
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(user,userVO);
-        log.info("userVO:{}", userVO.toString());
+        log.info("userVO:{}", userVO);
         return userVO;
     }
 
@@ -82,7 +85,7 @@ public class UserServiceImpl implements UserService {
         String userName = UserContext.getUserName();
         String name = userDTO.getName();
         User user = userMapper.getUserInfoByName(name);
-        if (user != null || name.equals(userName)) {
+        if (user != null && name.equals(userName)) {
             throw new UserNameHasExist(RespondCode.NAME_EXIST);
         }
         LocalDateTime now = LocalDateTime.now();
@@ -90,12 +93,20 @@ public class UserServiceImpl implements UserService {
         user = userMapper.getUserInfoByName(name);
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(user,userVO);
-        log.info("userVO:{}", userVO.toString());
+        log.info("userVO:{}", userVO);
         return userVO;
     }
 
     @Override
-    public UserVO updateUserAvatar(UserDTO userDTO) {
+    public void updateUserAvatar(UserDTO userDTO) {
+        String userName = UserContext.getUserName();
+        User user = userMapper.getUserInfoByName(userName);
+        String oldKey = user.getImage();
+        if (oldKey != null && !oldKey.equals("")) {
+            fileService.deleteObject(oldKey);
+        }
+        user.setImage(userDTO.getObjectKey());
+        userMapper.updateUserAvatar(user);
 
     }
 }
