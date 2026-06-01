@@ -32,3 +32,5 @@ Thumbs.db
 .env.local
 application-dev.yml
 !application-example.yml
+
+log.md
