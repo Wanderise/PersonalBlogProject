@@ -1,7 +1,6 @@
 package com.third.service.impl;
 
 import com.alibaba.fastjson.JSON;
-import com.github.pagehelper.Constant;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import com.third.common.context.UserContext;
@@ -61,6 +60,32 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
         articleVO.setTag(tags);
         return articleVO;
+    }
+//    添加关联表和Tag表
+    private void simpleAddTags(Integer ArticleId, List<String> tags){
+        for (String tag : tags) {
+            Tag tagByName = articleMapper.getTagByName(tag);
+            if (tagByName == null) {
+                tagByName = new Tag();
+                tagByName.setName(tag);
+                tagByName.setGmtCreate(LocalDateTime.now());
+                articleMapper.addTag(tagByName);
+            }
+            articleMapper.addArticleTag(ArticleId, tagByName.getId());
+        }
+    }
+
+    private void simpleDeleteTags(Integer ArticleId, List<String> tags){
+        articleMapper.deleteArticleTagById(ArticleId);
+
+        for (String tag : tags) {
+            Tag tagByName = articleMapper.getTagByName(tag);
+            Integer tagId = tagByName.getId();
+            int articleCount = articleMapper.getArticleCountByTagId(tagId);
+            if(articleCount == 0) {
+                articleMapper.deleteTagById(tagId);
+            }
+        }
     }
 
     @Override
@@ -139,22 +164,36 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (userId != article.getWriterId()) {
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         }
-        articleMapper.deleteArticleTagById(id);
         articleMapper.deleteArticleById(id);
         List<String> tags = article.getTag();
-        for (String tag : tags) {
-            Tag tagByName = articleMapper.getTagByName(tag);
-            Integer tagId = tagByName.getId();
-            int articleCount = articleMapper.getArticleTagByTagId(tagId);
-            if(articleCount == 0) {
-                articleMapper.deleteTagById(tagId);
-            }
-        }
+        simpleDeleteTags(id, tags);
+
         if(article.getImage() != null) {
             List<String> imageUrls = article.getImage();
             for (String imageUrl : imageUrls) {
                 fileService.deleteObject(imageUrl);
             }
         }
+    }
+
+    @Override
+    @Transactional
+    public void updateArticleById(Integer id, ArticleAddDTO articleAddDTO) {
+        int userId = UserContext.getUserId();
+        Article article = articleMapper.getArticleById(id);
+        if (userId != article.getWriterId()) {
+            throw new NoAuthorization(RespondCode.FORBIDDEN);
+        }
+        BeanUtils.copyProperties(articleAddDTO, article);
+        article.setTag(JSON.toJSONString(articleAddDTO.getTag()));
+        article.setImage(JSON.toJSONString(articleAddDTO.getImage()));
+        article.setGmtModified(LocalDateTime.now());
+        log.info("updating_article:{}", article);
+        articleMapper.updateArticle(article);
+        articleMapper.deleteArticleTagById(id);
+        List<String> tags = articleAddDTO.getTag();
+        simpleAddTags(id, tags);
+
+
     }
 }

@@ -46,8 +46,11 @@ public interface ArticleMapper extends BaseMapper<Article> {
     void addTag(Tag tag);
 
     @Select("select count(article_id) from blog.article_tag where tag_id = #{tagId}")
-    int getArticleTagByTagId(Integer tagId);
+    int getArticleCountByTagId(Integer tagId);
 
     @Delete("delete from blog.tag where id = #{tagId}")
     void deleteTagById(Integer tagId);
+
+    @Update("update blog.article set title = #{title}, content = #{content}, tag = #{tag}, image = #{image}")
+    void updateArticle(Article article);
 }

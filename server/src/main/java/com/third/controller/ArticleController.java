@@ -59,4 +59,11 @@ public class ArticleController {
         return Result.success();
     }
 
+    @PutMapping("{id}")
+    public Result updateArticle(@PathVariable("id") Integer id, @RequestBody ArticleAddDTO articleAddDTO) {
+        log.info("更新文章:" + id);
+        articleService.updateArticleById(id, articleAddDTO);
+        return Result.success();
+    }
+
 }

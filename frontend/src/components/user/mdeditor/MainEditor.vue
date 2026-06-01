@@ -26,7 +26,7 @@
       </div>
       <div class="form-section">
         <label class="section-label">文章图片</label>
-        <ImageUploader ref="uploaderRef" />
+        <ImageUploader ref="uploaderRef" :existing-images="existingImagesWithUrls" />
       </div>
     </div>
 
@@ -78,6 +78,14 @@ const editId = route.query.edit ? Number(route.query.edit) : null
 const isEdit = !!editId
 
 const article = reactive({ title: '', text: '', tags: [] })
+const existingImages = ref([])
+const existingImagesWithUrls = computed(() => {
+  return existingImages.value.map((key, i) => ({
+    key,
+    url: existingImageUrls.value[i] || key
+  }))
+})
+const existingImageUrls = ref([])
 const uploaderRef = ref(null)
 const submitting = ref(false)
 const uploading = ref(false)
@@ -97,6 +105,8 @@ onMounted(async () => {
       article.title = data.title || ''
       article.text = data.content || ''
       article.tags = data.tag || []
+      existingImages.value = data.image || []
+      existingImageUrls.value = data.imageUrls || []
     } catch {
       ElMessage.error('加载文章失败')
       router.back()
@@ -108,7 +118,8 @@ async function submit() {
   submitting.value = true
   try {
     const files = uploaderRef.value?.getFiles() || []
-    const imageKeys = []
+    const validExistingKeys = uploaderRef.value?.getValidExistingKeys() || []
+    const imageKeys = [...validExistingKeys]
 
     if (files.length > 0) {
       uploading.value = true

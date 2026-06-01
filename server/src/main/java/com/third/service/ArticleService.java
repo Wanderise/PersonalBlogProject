@@ -25,4 +25,6 @@ public interface ArticleService extends IService<Article> {
     ArticleListVO getArticleList(int page, int size, String tag, String keyword);
 
     void deleteArticle(Integer id);
+
+    void updateArticleById(Integer id, ArticleAddDTO articleAddDTO);
 }
