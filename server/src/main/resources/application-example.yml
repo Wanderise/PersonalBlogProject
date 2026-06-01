@@ -1,0 +1,11 @@
+# ========== 配置模板 ==========
+# 复制此文件为 application-dev.yml，填入你的凭据
+
+spring:
+  datasource:
+    username: 数据库用户名
+    password: 数据库密码
+
+r2:
+  access-key: Cloudflare R2 Access Key
+  secret-key: Cloudflare R2 Secret Key
