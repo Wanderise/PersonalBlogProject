@@ -101,16 +101,13 @@ async function handleAvatarChange(file) {
   avatarUploading.value = true
   try {
     const objectKey = `avatars/${user.id}_${Date.now()}.${file.name.split('.').pop()}`
-
     const { data } = await getUploadUrl({ objectKey, contentType: file.type })
     await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
     await updateAvatar(objectKey)
-
     updateLocalUser({ image: objectKey })
     const { data: dlData } = await getDownloadUrl(objectKey)
     user.image = dlData.downloadUrl
     await loadAvatar()
-
     ElMessage.success('头像更新成功')
   } catch {
     ElMessage.error('头像上传失败')
@@ -129,9 +126,7 @@ function levelLabel(lv) {
   return map[lv] || '普通用户'
 }
 
-onMounted(() => {
-  fetchUserInfo()
-})
+onMounted(() => { fetchUserInfo() })
 </script>
 
 <template>
@@ -143,7 +138,7 @@ onMounted(() => {
         :before-upload="beforeAvatarUpload"
         accept="image/*"
       >
-        <el-avatar :size="96" :src="user.image">
+        <el-avatar :size="100" :src="user.image">
           {{ user.name?.charAt(0) || '用' }}
         </el-avatar>
         <div class="avatar-overlay">
@@ -153,6 +148,7 @@ onMounted(() => {
       </el-upload>
       <h2 class="profile-name">{{ user.name }}</h2>
       <span class="profile-badge">{{ levelLabel(user.level) }}</span>
+      <p class="profile-join">注册于 {{ user.gmtCreate || '-' }}</p>
     </div>
 
     <div class="profile-card">
@@ -165,7 +161,6 @@ onMounted(() => {
         <el-descriptions-item label="用户ID">{{ user.id }}</el-descriptions-item>
         <el-descriptions-item label="用户名">{{ user.name }}</el-descriptions-item>
         <el-descriptions-item label="用户等级">{{ levelLabel(user.level) }}</el-descriptions-item>
-        <el-descriptions-item label="注册时间">{{ user.gmtCreate || '-' }}</el-descriptions-item>
       </el-descriptions>
 
       <el-form v-else label-width="80px" class="edit-form">
@@ -203,9 +198,9 @@ onMounted(() => {
 
 <style scoped>
 .profile-page {
-  max-width: 640px;
+  max-width: 600px;
   margin: 0 auto;
-  padding: 24px 0;
+  padding: 24px 0 60px;
 }
 
 .profile-header {
@@ -224,9 +219,10 @@ onMounted(() => {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -237,15 +233,15 @@ onMounted(() => {
 .avatar-uploader:hover .avatar-overlay { opacity: 1; }
 
 .profile-name {
-  margin: 20px 0 10px;
-  font-size: 26px;
+  margin: 22px 0 10px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--c-text);
 }
 
 .profile-badge {
   display: inline-block;
-  padding: 3px 14px;
+  padding: 4px 16px;
   border-radius: 14px;
   font-size: 13px;
   font-weight: 500;
@@ -253,10 +249,16 @@ onMounted(() => {
   background: var(--c-primary-light);
 }
 
+.profile-join {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--c-text-muted);
+}
+
 .profile-card {
   background: var(--c-surface);
   border-radius: var(--radius);
-  padding: 28px;
+  padding: 32px;
   box-shadow: var(--c-shadow);
   border: 1px solid var(--c-border);
 }
@@ -265,13 +267,13 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .card-title h3 {
   margin: 0;
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--c-text);
 }
 

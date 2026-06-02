@@ -385,7 +385,7 @@
 
 **后端需处理**:
 1. `writerId` 从 token 中获取，前端不传
-2. `tag` 存入 `article` 表的 `tag` 字段（JSON 数组格式），同时写入 `article_tag` 关联表
+2. `tag` 写入 `article_tag` 关联表和 `tag` 表
 3. `gmtCreate` 和 `gmtModified` 设为当前时间
 4. 返回新文章 ID
 
@@ -441,7 +441,7 @@
 
 **后端需处理**:
 1. 校验当前用户是否为文章作者，非作者返回 400
-2. 更新 `article` 表及 `article_tag` 关联表
+2. 更新 `article` 表，同时更新 `article_tag` 关联表
 3. 更新 `gmtModified`
 
 ---
@@ -507,7 +507,7 @@
 1. 根据文章 ID 查询，同时 JOIN 用户表获取 `writerName`
 2. `image` 字段从 JSON 字符串反序列化为 `List<String>`（objectKey 数组）
 3. 对 `image` 中每个 objectKey 生成预签名下载 URL，填入 `imageUrls`
-4. `tag` 从 JSON 字符串反序列化为 `List<String>`
+4. `tag` 从 `article_tag` 关联表查询
 
 ---
 
@@ -536,7 +536,7 @@
     "total": 25,
     "page": 1,
     "size": 10,
-    "list": [
+    "articles": [
       {
         "id": 1,
         "title": "Spring Boot 入门",
@@ -554,7 +554,7 @@
 ```
 
 **后端需处理**:
-1. 分页查询，返回 `total`、`page`、`size`、`list`
+1. 分页查询，返回 `total`、`page`、`size`、`articles`
 2. `content` 截取前 200 字符作为 `summary`，列表不返回全文
 3. 支持 `keyword` 模糊搜索（LIKE `%keyword%`）和 `tag` 筛选
 4. 按 `gmtModified` 降序排列
@@ -581,9 +581,13 @@
     "total": 5,
     "page": 1,
     "size": 10,
-    "list": [
+    "articles": [
       {
         "id": 1,
+        "image": ["covers/1_1684512000000.jpg"],
+        "imageUrls": ["https://<r2-presigned-url>"],
+        "writerId": 1,
+        "writerName": "zhangsan",
         "title": "Spring Boot 入门",
         "summary": "第一章...",
         "tag": ["Java", "Spring"],

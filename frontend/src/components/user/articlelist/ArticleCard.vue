@@ -10,32 +10,36 @@
       >
         <template #error>
           <div class="cover-fallback">
-            <el-icon :size="32"><Document /></el-icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+            </svg>
           </div>
         </template>
       </el-image>
       <div v-else class="cover-fallback">
-        <el-icon :size="32"><Document /></el-icon>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+        </svg>
       </div>
+      <div class="cover-gradient"></div>
     </div>
 
     <div class="card-body">
       <h3 class="card-title">{{ article.title || '无标题' }}</h3>
       <p class="card-excerpt">{{ excerpt }}</p>
-
       <div class="card-meta">
+        <span class="card-author" v-if="article.writerName">{{ article.writerName }}</span>
+        <span class="card-date">{{ formatDate(article.gmtCreate) }}</span>
         <div class="card-tags" v-if="article.tag && article.tag.length">
-          <el-tag v-for="tag in article.tag" :key="tag" size="small" type="info">{{ tag }}</el-tag>
-        </div>
-        <div class="card-info">
-          <span class="card-date">{{ formatDate(article.gmtCreate) }}</span>
-          <span class="card-author" v-if="article.writerName">{{ article.writerName }}</span>
+          <span class="mini-tag" v-for="tag in article.tag.slice(0, 3)" :key="tag">{{ tag }}</span>
         </div>
       </div>
     </div>
 
     <div v-if="showActions" class="card-actions" @click.stop>
-      <el-button size="small" type="primary" text @click="$emit('edit')">
+      <el-button size="small" text @click="$emit('edit')">
         <el-icon><Edit /></el-icon> 编辑
       </el-button>
       <el-popconfirm title="确定删除这篇文章？" @confirm="$emit('delete')">
@@ -51,7 +55,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Document, Edit, Delete } from '@element-plus/icons-vue'
+import { Edit, Delete } from '@element-plus/icons-vue'
 
 const props = defineProps({
   article: { type: Object, required: true },
@@ -78,28 +82,32 @@ function formatDate(dateStr) {
   border-radius: var(--radius);
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--c-border);
+  padding: 0;
 }
 
 .article-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-6px);
   box-shadow: var(--c-shadow-lg);
+  border-color: transparent;
 }
 
 .card-cover {
   height: 180px;
-  background: linear-gradient(135deg, #eef2ff 0%, #f0f4ff 100%);
+  position: relative;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
   overflow: hidden;
 }
 
 .cover-img {
   width: 100%;
   height: 100%;
-  transition: transform 0.4s ease;
+  transition: transform 0.5s ease;
 }
 
 .article-card:hover .cover-img {
-  transform: scale(1.05);
+  transform: scale(1.06);
 }
 
 .cover-fallback {
@@ -108,16 +116,26 @@ function formatDate(dateStr) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--c-text-muted);
+  color: #c4b5fd;
+}
+
+.cover-gradient {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.02));
+  pointer-events: none;
 }
 
 .card-body {
-  padding: 16px 20px 0;
+  padding: 18px 20px 0;
 }
 
 .card-title {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--c-text);
   margin: 0 0 8px;
   overflow: hidden;
@@ -138,28 +156,37 @@ function formatDate(dateStr) {
 
 .card-meta {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 14px;
   padding-bottom: 16px;
-}
-
-.card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
-
-.card-info {
-  display: flex;
-  gap: 12px;
   font-size: 12px;
   color: var(--c-text-muted);
-  margin-left: auto;
+}
+
+.card-author { font-weight: 500; }
+
+.card-date { margin-left: auto; }
+
+.card-tags {
+  display: flex;
+  gap: 4px;
+}
+
+.mini-tag {
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  font-weight: 500;
 }
 
 .card-actions {
   display: flex;
   justify-content: flex-end;
   gap: 4px;
-  padding: 8px 16px 12px;
+  padding: 8px 14px 12px;
   border-top: 1px solid var(--c-border);
-  margin-top: 4px;
 }
 </style>

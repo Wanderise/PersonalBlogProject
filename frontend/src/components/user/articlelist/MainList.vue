@@ -1,7 +1,10 @@
 <template>
   <div class="list-page">
     <div class="page-header">
-      <h2>文章列表</h2>
+      <div class="header-left">
+        <h2>发现</h2>
+        <span class="header-count" v-if="total">共 {{ total }} 篇文章</span>
+      </div>
       <el-input
         v-model="keyword"
         placeholder="搜索文章..."
@@ -128,30 +131,35 @@ function viewArticle(id) {
 </script>
 
 <style scoped>
-.list-page {
-  max-width: 1200px;
-  margin: 0 auto;
-}
+.list-page { max-width: 1200px; margin: 0 auto; }
 
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   gap: 20px;
+}
+
+.header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .page-header h2 {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--c-text);
-  flex-shrink: 0;
   margin: 0;
 }
 
-.search-input {
-  max-width: 300px;
+.header-count {
+  font-size: 14px;
+  color: var(--c-text-muted);
 }
+
+.search-input { max-width: 280px; }
 
 .tag-filter {
   display: flex;
@@ -159,6 +167,10 @@ function viewArticle(id) {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 24px;
+  padding: 12px 16px;
+  background: var(--c-surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border);
 }
 
 .filter-tag {
@@ -166,27 +178,21 @@ function viewArticle(id) {
   transition: all var(--transition);
 }
 
-.filter-tag:hover {
-  transform: translateY(-1px);
-}
+.filter-tag:hover { transform: translateY(-1px); }
 
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 
-.loading-area {
-  padding: 40px 0;
-}
-
-.empty-state {
-  padding: 80px 0;
-}
+.loading-area { padding: 40px 0; }
+.empty-state { padding: 80px 0; }
 
 .pagination {
   display: flex;
   justify-content: center;
-  margin-top: 36px;
+  margin-top: 40px;
+  padding-bottom: 24px;
 }
 </style>

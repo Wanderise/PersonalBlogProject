@@ -169,10 +169,12 @@ async function submit() {
 
 <style scoped>
 .editor-form {
+  max-width: 860px;
+  margin: 0 auto;
   background: var(--c-surface);
   border-radius: var(--radius);
-  padding: 36px;
-  box-shadow: var(--c-shadow-md);
+  padding: 40px;
+  box-shadow: var(--c-shadow);
   border: 1px solid var(--c-border);
 }
 
@@ -188,9 +190,7 @@ async function submit() {
   margin-bottom: 10px;
 }
 
-.title-input {
-  max-width: 640px;
-}
+.title-input { max-width: 640px; }
 
 .form-row {
   display: flex;
@@ -198,17 +198,14 @@ async function submit() {
   align-items: flex-start;
 }
 
-.form-grow {
-  flex: 1;
-  min-width: 0;
-}
+.form-grow { flex: 1; min-width: 0; }
 
 .upload-status {
   margin: 16px 0;
-  padding: 12px 16px;
+  padding: 14px 18px;
   background: var(--c-primary-light);
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(91, 127, 255, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.12);
 }
 
 .status-text {
@@ -223,7 +220,7 @@ async function submit() {
 .upload-bar { max-width: 400px; }
 
 .form-actions {
-  margin-top: 12px;
+  margin-top: 16px;
   padding-top: 28px;
   border-top: 1px solid var(--c-border);
   display: flex;

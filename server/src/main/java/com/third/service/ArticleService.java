@@ -27,4 +27,6 @@ public interface ArticleService extends IService<Article> {
     void deleteArticle(Integer id);
 
     void updateArticleById(Integer id, ArticleAddDTO articleAddDTO);
+
+    ArticleListVO getMyArticleList(int page, int size);
 }

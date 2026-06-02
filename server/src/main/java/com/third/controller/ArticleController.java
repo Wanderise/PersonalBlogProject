@@ -66,4 +66,12 @@ public class ArticleController {
         return Result.success();
     }
 
+    @GetMapping("/my")
+    public Result<ArticleListVO> getMyArticle(int page, int size) {
+        log.info("page:" + page + " size:" + size);
+        ArticleListVO articleListVO = articleService.getMyArticleList(page, size);
+        return Result.success(articleListVO);
+
+    }
+
 }

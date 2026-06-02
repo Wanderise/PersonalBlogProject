@@ -19,13 +19,16 @@ import java.util.List;
 public interface ArticleMapper extends BaseMapper<Article> {
 
 
-    @Insert("insert into blog.article(writer_id, tag, gmt_create, gmt_modified, content, title, image) "+
-            "values (#{writerId}, #{tag}, #{gmtCreate}, #{gmtModified}, #{content}, #{title}, #{image})")
+    @Insert("insert into blog.article(writer_id, gmt_create, gmt_modified, content, title, image) "+
+            "values (#{writerId}, #{gmtCreate}, #{gmtModified}, #{content}, #{title}, #{image})")
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     int addArticle(Article articleEntity);
 
-    @Insert("insert into blog.article_tag(article_id, tag_id) VALUES (#{articleId}, #{tagId})")
+    @Insert("insert ignore into blog.article_tag(article_id, tag_id) VALUES (#{articleId}, #{tagId})")
     void addArticleTag(int articleId, int tagId);
+
+    @Select("select t.name from blog.tag t inner join blog.article_tag at on t.id = at.tag_id where at.article_id = #{articleId}")
+    List<String> getTagsByArticleId(Integer articleId);
 
     @Select("select *, blog.user.name AS writerName from blog.article INNER JOIN blog.user ON blog.article.writer_id = blog.user.id where blog.article.id = #{id}")
     Article getArticleById(Integer id);
@@ -51,6 +54,8 @@ public interface ArticleMapper extends BaseMapper<Article> {
     @Delete("delete from blog.tag where id = #{tagId}")
     void deleteTagById(Integer tagId);
 
-    @Update("update blog.article set title = #{title}, content = #{content}, tag = #{tag}, image = #{image}")
+    @Update("update blog.article set title = #{title}, content = #{content}, image = #{image}, gmt_modified = #{gmtModified} where id = #{id}")
     void updateArticle(Article article);
+
+    List<Article> getMyArticleList(int userId);
 }

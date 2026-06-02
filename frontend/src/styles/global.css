@@ -1,30 +1,30 @@
-/* === Design System === */
+/* === Design System — Indigo Studio === */
 :root {
-  --c-primary: #5b7fff;
-  --c-primary-light: #eef2ff;
-  --c-primary-dark: #4a6ae0;
-  --c-bg: #f8f9fc;
+  --c-primary: #7c3aed;
+  --c-primary-light: #f5f3ff;
+  --c-primary-dark: #6d28d9;
+  --c-primary-glow: rgba(124, 58, 237, 0.15);
+  --c-bg: #faf9fb;
   --c-surface: #ffffff;
-  --c-text: #1a1a2e;
-  --c-text-secondary: #6b7280;
-  --c-text-muted: #9ca3af;
-  --c-border: #e8ecf1;
-  --c-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
-  --c-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
-  --c-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --c-text: #18181b;
+  --c-text-secondary: #52525b;
+  --c-text-muted: #a1a1aa;
+  --c-border: #e4e4e7;
+  --c-border-light: #f4f4f5;
+  --c-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --c-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+  --c-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
   --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 16px;
+  --radius: 14px;
+  --radius-lg: 18px;
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --transition: 0.2s ease;
 }
 
 /* === Base === */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { font-size: 16px; }
 
 body {
   font-family: var(--font);
@@ -32,11 +32,12 @@ body {
   color: var(--c-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
 }
 
-#app {
-  min-height: 100vh;
-}
+#app { min-height: 100vh; }
+
+a { color: var(--c-primary); text-decoration: none; }
 
 /* === Element Plus Overrides === */
 .el-button--primary {
@@ -52,9 +53,11 @@ body {
 }
 
 .el-button--primary:hover {
-  box-shadow: 0 2px 8px rgba(91, 127, 255, 0.35);
+  box-shadow: 0 4px 14px var(--c-primary-glow);
   transform: translateY(-1px);
 }
+
+.el-button--primary:active { transform: translateY(0); }
 
 .el-input .el-input__wrapper,
 .el-input-tag .el-input-tag__wrapper {
@@ -62,6 +65,7 @@ body {
   box-shadow: none;
   border: 1px solid var(--c-border);
   transition: all var(--transition);
+  background: var(--c-surface);
 }
 
 .el-input .el-input__wrapper:hover,
@@ -72,7 +76,7 @@ body {
 .el-input.is-focus .el-input__wrapper,
 .el-input-tag.is-focus .el-input-tag__wrapper {
   border-color: var(--c-primary);
-  box-shadow: 0 0 0 3px rgba(91, 127, 255, 0.1);
+  box-shadow: 0 0 0 3px var(--c-primary-glow);
 }
 
 .el-card {
@@ -80,6 +84,7 @@ body {
   border: 1px solid var(--c-border);
   box-shadow: var(--c-shadow);
   transition: all var(--transition);
+  background: var(--c-surface);
 }
 
 .el-tag {
@@ -87,31 +92,26 @@ body {
   font-weight: 500;
 }
 
+.el-tag--primary {
+  --el-tag-bg-color: var(--c-primary-light);
+  --el-tag-border-color: transparent;
+  --el-tag-text-color: var(--c-primary);
+}
+
+.el-pagination.is-background .el-pager li:not(.is-disabled).is-active {
+  background: var(--c-primary);
+}
+
+.el-popconfirm__action .el-button--primary {
+  margin-left: 8px;
+}
+
 /* === Scrollbar === */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
-}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
 
 /* === Page Transition === */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }

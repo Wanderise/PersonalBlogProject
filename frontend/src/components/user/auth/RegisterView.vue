@@ -85,11 +85,12 @@ const handleRegister = async () => {
 
 <style scoped>
 .auth-page {
-  min-height: calc(100vh - 56px);
+  min-height: calc(100vh - 58px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background: radial-gradient(ellipse at 50% 35%, rgba(124, 58, 237, 0.04) 0%, transparent 60%);
 }
 
 .auth-card {
@@ -101,24 +102,21 @@ const handleRegister = async () => {
   border: 1px solid var(--c-border);
 }
 
-.auth-header {
-  text-align: center;
-  margin-bottom: 36px;
-}
+.auth-header { text-align: center; margin-bottom: 36px; }
 
 .auth-icon {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--c-primary-light);
-  border-radius: var(--radius-sm);
+  border-radius: 14px;
   color: var(--c-primary);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
-.auth-icon svg { width: 24px; height: 24px; }
+.auth-icon svg { width: 26px; height: 26px; }
 
 .auth-header h2 {
   font-size: 22px;
@@ -130,6 +128,7 @@ const handleRegister = async () => {
 .auth-header p {
   font-size: 14px;
   color: var(--c-text-muted);
+  margin: 0;
 }
 
 .submit-btn { width: 100%; }
@@ -142,7 +141,6 @@ const handleRegister = async () => {
 
 .auth-footer a {
   color: var(--c-primary);
-  text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
 }
 </style>

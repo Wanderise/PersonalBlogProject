@@ -20,6 +20,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.services.s3.endpoints.internal.Substring;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -46,24 +47,23 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private ArticleVO articleToVO(Article article) {
         ArticleVO articleVO = new ArticleVO();
         BeanUtils.copyProperties(article, articleVO);
-        List<String> tags = JSON.parseArray(article.getTag(), String.class);
-        if (article.getImage() != null) {
+        articleVO.setTag(articleMapper.getTagsByArticleId(article.getId()));
+        if (article.getImage() != null && !article.getImage().isEmpty()) {
             List<String> images = JSON.parseArray(article.getImage(), String.class);
-
             List<String> imageUrls = new ArrayList<>();
             for (String image : images) {
-                String DownloadPresignedUrl = fileService.getDownloadPresignedUrl(image);
-                imageUrls.add(DownloadPresignedUrl);
+                imageUrls.add(fileService.getDownloadPresignedUrl(image));
             }
             articleVO.setImageUrls(imageUrls);
             articleVO.setImage(images);
         }
-        articleVO.setTag(tags);
+        String summary = article.getContent().length() >= 200 ? article.getContent().substring(0, 201) : article.getContent();
+        articleVO.setSummary(summary);
         return articleVO;
     }
 //    添加关联表和Tag表
     private void simpleAddTags(Integer ArticleId, List<String> tags){
-        for (String tag : tags) {
+        for (String tag : tags.stream().distinct().toList()) {
             Tag tagByName = articleMapper.getTagByName(tag);
             if (tagByName == null) {
                 tagByName = new Tag();
@@ -92,12 +92,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public ArticleVO addArticle(ArticleAddDTO articleDTO) {
         Article article = new Article();
         BeanUtils.copyProperties(articleDTO, article);
-        List<String> tagList = articleDTO.getTag();
-        String tags = JSON.toJSONString(tagList);
-        article.setTag(tags);
-        List<String> imageList = articleDTO.getImage();
-        String image = JSON.toJSONString(imageList);
-        article.setImage(image);
+        article.setImage(JSON.toJSONString(articleDTO.getImage()));
         article.setGmtCreate(LocalDateTime.now());
         article.setGmtModified(LocalDateTime.now());
         int userId = UserContext.getUserId();
@@ -106,19 +101,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         articleMapper.addArticle(article);
         int articleId = article.getId();
-
-        for (String tag : tagList) {
-            Tag tagByName = articleMapper.getTagByName(tag);
-            if (tagByName != null) {
-                articleMapper.addArticleTag(articleId, tagByName.getId());
-                continue;
-            }
-            Tag newTag = new Tag();
-            newTag.setName(tag);
-            newTag.setGmtCreate(LocalDateTime.now());
-            articleMapper.addTag(newTag);
-            articleMapper.addArticleTag(articleId, newTag.getId());
-        }
+        simpleAddTags(articleId, articleDTO.getTag());
 
         ArticleVO articleVO = new ArticleVO();
         articleVO.setId(articleId);
@@ -146,7 +129,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         List<ArticleVO> articleVOList = new ArrayList<>();
         for (Article article : Articles) {
             ArticleVO articleVO = articleToVO(article);
-            articleVO.setSummary(article.getContent());
             articleVOList.add(articleVO);
         }
         articleListVO.setArticles(articleVOList);
@@ -185,7 +167,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         }
         BeanUtils.copyProperties(articleAddDTO, article);
-        article.setTag(JSON.toJSONString(articleAddDTO.getTag()));
         article.setImage(JSON.toJSONString(articleAddDTO.getImage()));
         article.setGmtModified(LocalDateTime.now());
         log.info("updating_article:{}", article);
@@ -195,5 +176,26 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         simpleAddTags(id, tags);
 
 
+    }
+
+    @Override
+    public ArticleListVO getMyArticleList(int page, int size) {
+        int userId = UserContext.getUserId();
+        PageHelper.startPage(page, size);
+        List<Article> articles = articleMapper.getMyArticleList(userId);
+        PageInfo<Article> pageInfo = new PageInfo<>(articles);
+        log.info("articles:{}", articles);
+        ArticleListVO articleListVO = new ArticleListVO();
+        articleListVO.setPage(pageInfo.getPageNum());
+        articleListVO.setTotal(pageInfo.getPages());
+        articleListVO.setSize(pageInfo.getPages());
+        List<ArticleVO> articleVOList = new ArrayList<>();
+        for (Article article : articles) {
+            ArticleVO articleVO = articleToVO(article);
+            articleVOList.add(articleVO);
+        }
+        articleListVO.setArticles(articleVOList);
+        log.info("articleListVO:{}", articleListVO);
+        return articleListVO;
     }
 }

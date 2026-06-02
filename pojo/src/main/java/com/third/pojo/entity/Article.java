@@ -11,7 +11,6 @@ import lombok.experimental.Accessors;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * <p>
@@ -42,12 +41,6 @@ public class Article implements Serializable {
      */
       @ApiModelProperty("作者id")
     private Integer writerId;
-
-      /**
-     * 文章标签list
-     */
-      @ApiModelProperty("文章标签list")
-    private String tag;
 
     private String writerName;
 

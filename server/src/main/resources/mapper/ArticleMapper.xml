@@ -7,7 +7,6 @@
         a.id,
         a.title,
         a.content,
-        a.tag,
         a.gmt_modified AS gmtModified,
         CASE
         WHEN CHAR_LENGTH(a.content) > 200 THEN CONCAT(LEFT(a.content, 200), '...')
@@ -27,9 +26,31 @@
             </if>
 
             <if test="tag != null and tag != ''">
-                AND JSON_CONTAINS(a.tag, JSON_QUOTE(#{tag}))
+                AND EXISTS (
+                    SELECT 1 FROM blog.article_tag at2
+                    INNER JOIN blog.tag t2 ON at2.tag_id = t2.id
+                    WHERE at2.article_id = a.id AND t2.name = #{tag}
+                )
             </if>
         </where>
+        ORDER BY a.gmt_modified DESC
+    </select>
+    <select id="getMyArticleList" resultType="com.third.pojo.entity.Article">
+        SELECT
+        a.id,
+        a.title,
+        a.content,
+        a.gmt_modified AS gmtModified,
+        CASE
+        WHEN CHAR_LENGTH(a.content) > 200 THEN CONCAT(LEFT(a.content, 200), '...')
+        ELSE a.content
+        END AS summary,
+        a.image AS image,
+        a.writer_id AS writerId,
+        (SELECT name FROM blog.user WHERE id = a.writer_id) AS writerName,
+        a.gmt_create AS gmtCreate
+        FROM blog.article a
+        WHERE a.writer_id = #{userId}
         ORDER BY a.gmt_modified DESC
     </select>
 </mapper>

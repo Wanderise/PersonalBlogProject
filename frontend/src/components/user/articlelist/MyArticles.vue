@@ -67,7 +67,7 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getMyArticles({ page: currentPage.value, size: pageSize })
-    list.value = res.data.list || []
+    list.value = res.data.articles || []
     total.value = res.data.total || 0
   } catch {
     ElMessage.error('加载失败')
@@ -91,10 +91,7 @@ async function handleDelete(id) {
 </script>
 
 <style scoped>
-.my-articles {
-  max-width: 960px;
-  margin: 0 auto;
-}
+.my-articles { max-width: 960px; margin: 0 auto; }
 
 .page-header {
   display: flex;
@@ -111,7 +108,7 @@ async function handleDelete(id) {
 
 .header-left h2 {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--c-text);
   margin: 0;
 }
@@ -124,20 +121,16 @@ async function handleDelete(id) {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 
-.loading-area {
-  padding: 40px 0;
-}
-
-.empty-state {
-  padding: 80px 0;
-}
+.loading-area { padding: 40px 0; }
+.empty-state { padding: 80px 0; }
 
 .pagination {
   display: flex;
   justify-content: center;
-  margin-top: 36px;
+  margin-top: 40px;
+  padding-bottom: 24px;
 }
 </style>

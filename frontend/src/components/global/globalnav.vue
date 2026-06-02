@@ -6,9 +6,7 @@ import { useAuth } from '@/composables/useAuth.js'
 const router = useRouter()
 const { state, loadAvatar, clearAuth } = useAuth()
 
-onMounted(() => {
-  loadAvatar()
-})
+onMounted(() => { loadAvatar() })
 
 function handleToProfile() {
   router.push(`/User/${state.user.id || 1}/profile`)
@@ -23,7 +21,10 @@ function handleLogout() {
 <template>
   <header class="global-header">
     <div class="header-inner">
-      <router-link to="/" class="site-name">个人博客</router-link>
+      <router-link to="/" class="site-name">
+        <span class="site-dot"></span>
+        个人博客
+      </router-link>
 
       <nav class="header-nav" v-if="state.isLoggedIn">
         <router-link to="/User/1/home">首页</router-link>
@@ -32,7 +33,7 @@ function handleLogout() {
         <el-dropdown trigger="click" class="user-dropdown">
           <el-avatar
             v-if="state.avatarUrl"
-            :size="32"
+            :size="34"
             :src="state.avatarUrl"
             class="user-avatar-img"
           />
@@ -49,7 +50,7 @@ function handleLogout() {
 
       <nav class="header-nav" v-else>
         <router-link to="/login">登录</router-link>
-        <router-link to="/register" class="register-link">注册</router-link>
+        <router-link to="/register" class="btn-register">注册</router-link>
       </nav>
     </div>
   </header>
@@ -60,37 +61,47 @@ function handleLogout() {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px) saturate(180%);
   border-bottom: 1px solid var(--c-border);
 }
 
 .header-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 24px;
-  height: 56px;
+  padding: 0 28px;
+  height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .site-name {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   color: var(--c-text);
   text-decoration: none;
   letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.site-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-primary);
 }
 
 .header-nav {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
 }
 
 .header-nav a {
-  padding: 6px 14px;
+  padding: 7px 16px;
   border-radius: var(--radius-sm);
   color: var(--c-text-secondary);
   text-decoration: none;
@@ -110,46 +121,47 @@ function handleLogout() {
   font-weight: 600;
 }
 
-.register-link {
+.btn-register {
   background: var(--c-primary) !important;
   color: #fff !important;
+  margin-left: 4px;
 }
 
-.register-link:hover {
+.btn-register:hover {
   background: var(--c-primary-dark) !important;
   color: #fff !important;
 }
 
-.register-link.router-link-active {
-  background: var(--c-primary) !important;
-  color: #fff !important;
-}
-
-.user-dropdown {
-  margin-left: 8px;
-}
+.user-dropdown { margin-left: 6px; }
 
 .user-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  background: var(--c-primary);
+  background: linear-gradient(135deg, var(--c-primary), var(--c-primary-dark));
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity var(--transition);
+  transition: transform var(--transition), box-shadow var(--transition);
 }
 
-.user-avatar:hover { opacity: 0.85; }
+.user-avatar:hover {
+  transform: scale(1.08);
+  box-shadow: 0 2px 10px var(--c-primary-glow);
+}
 
 .user-avatar-img {
   cursor: pointer;
-  transition: opacity var(--transition);
+  transition: transform var(--transition), box-shadow var(--transition);
+  border: 2px solid var(--c-border);
 }
 
-.user-avatar-img:hover { opacity: 0.85; }
+.user-avatar-img:hover {
+  transform: scale(1.08);
+  box-shadow: 0 2px 10px var(--c-primary-glow);
+}
 </style>
