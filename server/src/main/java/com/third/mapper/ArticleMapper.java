@@ -25,7 +25,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
     int addArticle(Article articleEntity);
 
     @Insert("insert ignore into blog.article_tag(article_id, tag_id) VALUES (#{articleId}, #{tagId})")
-    void addArticleTag(int articleId, int tagId);
+    void addArticleTag(Integer articleId, Integer tagId);
 
     @Select("select t.name from blog.tag t inner join blog.article_tag at on t.id = at.tag_id where at.article_id = #{articleId}")
     List<String> getTagsByArticleId(Integer articleId);
@@ -57,5 +57,5 @@ public interface ArticleMapper extends BaseMapper<Article> {
     @Update("update blog.article set title = #{title}, content = #{content}, image = #{image}, gmt_modified = #{gmtModified} where id = #{id}")
     void updateArticle(Article article);
 
-    List<Article> getMyArticleList(int userId);
+    List<Article> getMyArticleList(Integer userId);
 }

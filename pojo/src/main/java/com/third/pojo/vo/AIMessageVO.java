@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class AIMessageVO {
-    private Long id;
+    private Integer id;
     private String role;
     private String content;
     private LocalDateTime gmtCreate;

@@ -9,9 +9,9 @@ public class UserContext {
         userVOThreadLocal.set(userVO);
     }
 
-    public static int getUserId() {
+    public static Integer getUserId() {
         UserVO userVO = userVOThreadLocal.get();
-        return userVO.getId();
+        return userVO != null ? userVO.getId() : null;
     }
 
     public static String getUserName() {

@@ -2,6 +2,8 @@ package com.third.pojo.entity;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,6 +32,7 @@ public class Tag implements Serializable {
      * 标签id
      */
       @ApiModelProperty("标签id")
+    @TableId(value = "id", type = IdType.AUTO)
     private Integer id;
 
       /**

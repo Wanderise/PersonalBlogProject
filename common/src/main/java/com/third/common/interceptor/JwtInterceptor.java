@@ -24,7 +24,7 @@ public class JwtInterceptor implements HandlerInterceptor {
         try {
             Claims claims = JJWTUtil.parseJWT(token);
             String userName = claims.get("UserName").toString();
-            int userId = (int) claims.get("userId");
+            Integer userId = ((Number) claims.get("userId")).intValue();
             UserVO userVO = new UserVO();
             userVO.setId(userId);
             userVO.setName(userName);

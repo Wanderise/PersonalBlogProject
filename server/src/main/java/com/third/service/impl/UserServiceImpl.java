@@ -72,7 +72,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserVO userInfo() {
-        int userId = UserContext.getUserId();
+        Integer userId = UserContext.getUserId();
         User user = userMapper.getUserInfoById(userId);
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(user,userVO);

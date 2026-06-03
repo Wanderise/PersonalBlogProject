@@ -7,6 +7,7 @@ import com.third.pojo.dto.AIMessage;
 import com.third.pojo.dto.AgentDTO;
 import com.third.pojo.dto.ConversationsDTO;
 import com.third.pojo.entity.Conversations;
+import com.third.pojo.vo.AIMessageVO;
 import com.third.pojo.vo.AgentVO;
 import com.third.pojo.vo.ConversationsVO;
 import com.third.service.ChatService;
@@ -41,12 +42,13 @@ public class ChatController {
     @Autowired
     ChatClient chatClient;
 
-    public void save(String prompt, Long conversationId){
+    public void save(String content, Integer conversationId){
         AIMessage aiMessage = new AIMessage();
         aiMessage.setRole("user");
-        aiMessage.setContent(prompt);
+        aiMessage.setContent(content);
         aiMessage.setConversationId(conversationId);
         aiMessage.setGmtCreate(LocalDateTime.now());
+        log.info("aiMessage={}", aiMessage);
         chatService.saveMessage(aiMessage);
     }
 
@@ -71,10 +73,18 @@ public class ChatController {
         return Result.success();
     }
 
+    @GetMapping("/conversations")
+    public Result<List<ConversationsVO>> getConversations() {
+        List<ConversationsVO> conversations = chatService.getConversations();
+        log.info("getConversations: {}", conversations);
+        return Result.success(conversations);
+    }
+
     @PostMapping("/conversations")
     public Result<ConversationsVO> addConversation(@RequestBody ConversationsDTO conversationsDTO) {
         log.info("addConversation: {}", conversationsDTO);
         ConversationsVO conversationsVO = chatService.addConversation(conversationsDTO);
+        log.info("conversationsVO: {}", conversationsVO);
         return Result.success(conversationsVO);
     }
 
@@ -93,9 +103,9 @@ public class ChatController {
     }
 
     @GetMapping("/conversations/{id}/messages")
-    public Result<List<Message>> getConversationMessages(@PathVariable Long id) {
+    public Result<List<AIMessageVO>> getConversationMessages(@PathVariable Integer id) {
         log.info("getConversationMessages: {}", id);
-        List<Message> messages = chatService.getConversationMessages(id);
+        List<AIMessageVO> messages = chatService.getConversationMessagesVO(id);
         return Result.success(messages);
     }
 
@@ -108,16 +118,16 @@ public class ChatController {
 
 
     @GetMapping(value = "/chat/stream", produces = "text/html;charset=UTF-8")
-    public Flux<String> generateStream(@PathVariable String message, @PathVariable Long ConversationId, @PathVariable Long AgentId) {
+    public Flux<String> generateStream(String message, Integer ConversationId, Integer AgentId) {
         List<AgentVO> agentList = chatService.getAgents();
-        String prompt = "";
+        String prompt = "你是一个有帮助的AI助手";
         for (AgentVO agentVO : agentList) {
             if (agentVO.getId().longValue() != AgentId)
                 continue;
             prompt = agentVO.getSystemPrompt();
         }
         List<Message> messages = chatService.getConversationMessages(ConversationId);
-        save(prompt, ConversationId);
+        save(message, ConversationId);
         return chatClient.prompt(prompt).user(message).messages(messages).stream().content();
     }
 }

@@ -8,7 +8,7 @@ import java.util.List;
 @Data
 public class ArticleVO {
 
-    private int id;
+    private Integer id;
     private Integer writerId;
     private String writerName;
     private String title;

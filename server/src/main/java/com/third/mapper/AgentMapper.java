@@ -16,7 +16,7 @@ public interface AgentMapper {
     void addAgent(Agent agent);
 
     @Select("select id, name, system_prompt, icon, gmt_create from blog.ai_agent where user_id = #{userId}")
-    List<AgentVO> getAgents(int userId);
+    List<AgentVO> getAgents(Integer userId);
 
     @Delete("delete from blog.ai_agent where id = #{id}")
     void deleteAgentById(Integer id);

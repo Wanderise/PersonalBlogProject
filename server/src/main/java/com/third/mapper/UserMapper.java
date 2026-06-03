@@ -25,7 +25,7 @@ public interface UserMapper {
     void updateUserName(String userName, String name, LocalDateTime now);
 
     @Select("select id, name, gmt_create, gmt_modified, password, image, level from blog.user where id = #{userId}")
-    User getUserInfoById(int userId);
+    User getUserInfoById(Integer userId);
 
     @Update("update blog.user SET image = #{image} where name = #{name}")
     void updateUserAvatar(User user);

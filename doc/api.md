@@ -531,8 +531,8 @@ POST /ai/chat/stream?conversationId=1&agentId=2&message=你好
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | message | String | 是 | 用户消息 |
-| conversationId | Long | 否 | 会话 ID（新对话不传，后端自动创建） |
-| agentId | Long | 否 | Agent ID |
+| conversationId | Integer | 否 | 会话 ID（新对话不传，后端自动创建） |
+| agentId | Integer | 否 | Agent ID |
 
 **响应格式:**`text/event-stream`（SSE），`ReadableStream` 逐块读取渲染 Markdown。
 
@@ -582,7 +582,7 @@ POST /ai/conversations
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | title | String | 是 | 会话标题 |
-| agentId | Long | 否 | 关联 Agent |
+| agentId | Integer | 否 | 关联 Agent |
 
 ```json
 { "title": "新对话", "agentId": 2 }

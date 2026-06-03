@@ -11,6 +11,7 @@ import com.third.pojo.dto.AgentDTO;
 import com.third.pojo.dto.ConversationsDTO;
 import com.third.pojo.entity.Agent;
 import com.third.pojo.entity.Conversations;
+import com.third.pojo.vo.AIMessageVO;
 import com.third.pojo.vo.AgentVO;
 import com.third.pojo.vo.ConversationsVO;
 import com.third.service.ChatService;
@@ -41,7 +42,7 @@ public class ChatServiceImpl implements ChatService {
         Agent agent = new Agent();
         BeanUtils.copyProperties(agentDTO, agent);
         agent.setGmtCreate(LocalDateTime.now());
-        int userId = UserContext.getUserId();
+        Integer userId = UserContext.getUserId();
         agent.setUserId(userId);
         agentMapper.addAgent(agent);
         BeanUtils.copyProperties(agent, agentVO);
@@ -50,7 +51,7 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public List<AgentVO> getAgents() {
-        int userId = UserContext.getUserId();
+        Integer userId = UserContext.getUserId();
         List<AgentVO> agentList = agentMapper.getAgents(userId);
         return agentList;
     }
@@ -64,8 +65,8 @@ public class ChatServiceImpl implements ChatService {
     public ConversationsVO addConversation(ConversationsDTO conversationsDTO) {
         Conversations conversations = new Conversations();
         BeanUtils.copyProperties(conversationsDTO, conversations);
-        int userId = UserContext.getUserId();
-        conversations.setUserId((long) userId);
+        Integer userId = UserContext.getUserId();
+        conversations.setUserId(userId);
         conversations.setGmtModified(LocalDate.now());
         conversations.setGmtModified(LocalDate.now());
 
@@ -92,7 +93,7 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public List<Message> getConversationMessages(Long id) {
+    public List<Message> getConversationMessages(Integer id) {
         LambdaQueryWrapper<AIMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AIMessage::getConversationId, id);
         List<AIMessage> aiMessages = messageMapper.selectList(wrapper);
@@ -102,7 +103,33 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    public List<AIMessageVO> getConversationMessagesVO(Integer id) {
+        LambdaQueryWrapper<AIMessage> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AIMessage::getConversationId, id);
+        List<AIMessage> aiMessages = messageMapper.selectList(wrapper);
+        return aiMessages.stream().map(message -> {
+            AIMessageVO aiMessageVO = new AIMessageVO();
+            BeanUtils.copyProperties(message, aiMessageVO);
+            return aiMessageVO;
+        }).collect(Collectors.toList());
+
+    }
+
+    @Override
     public void saveMessage(AIMessage aiMessage) {
         messageMapper.insert(aiMessage);
+    }
+
+    @Override
+    public List<ConversationsVO> getConversations() {
+        Integer userId = UserContext.getUserId();
+        LambdaQueryWrapper<Conversations> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Conversations::getUserId, userId);
+        List<Conversations> conversations = conversationMapper.selectList(wrapper);
+        return conversations.stream().map(conversation -> {
+            ConversationsVO conversationsVO = new ConversationsVO();
+            BeanUtils.copyProperties(conversation, conversationsVO);
+            return conversationsVO;
+        }).collect(Collectors.toList());
     }
 }

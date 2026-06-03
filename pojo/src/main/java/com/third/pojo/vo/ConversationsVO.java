@@ -6,9 +6,9 @@ import java.time.LocalDate;
 
 @Data
 public class ConversationsVO {
-    private Long id;
+    private Integer id;
     private String title;
-    private Long agentId;
+    private Integer agentId;
     private LocalDate gmtCreate;
     private LocalDate gmtModified;
 }

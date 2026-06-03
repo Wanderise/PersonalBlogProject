@@ -7,5 +7,5 @@ import java.time.LocalDate;
 @Data
 public class ConversationsDTO {
     private String title;
-    private Long agentId;
+    private Integer agentId;
 }

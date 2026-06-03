@@ -95,12 +95,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         article.setImage(JSON.toJSONString(articleDTO.getImage()));
         article.setGmtCreate(LocalDateTime.now());
         article.setGmtModified(LocalDateTime.now());
-        int userId = UserContext.getUserId();
+        Integer userId = UserContext.getUserId();
         article.setWriterId(userId);
         log.info("article:{}", article);
 
         articleMapper.addArticle(article);
-        int articleId = article.getId();
+        Integer articleId = article.getId();
         simpleAddTags(articleId, articleDTO.getTag());
 
         ArticleVO articleVO = new ArticleVO();
@@ -141,7 +141,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     @Transactional
     public void deleteArticle(Integer id) {
-        int userId = UserContext.getUserId();
+        Integer userId = UserContext.getUserId();
         ArticleVO article = getArticleById(id);
         if (userId != article.getWriterId()) {
             throw new NoAuthorization(RespondCode.FORBIDDEN);
@@ -161,7 +161,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     @Transactional
     public void updateArticleById(Integer id, ArticleAddDTO articleAddDTO) {
-        int userId = UserContext.getUserId();
+        Integer userId = UserContext.getUserId();
         Article article = articleMapper.getArticleById(id);
         if (userId != article.getWriterId()) {
             throw new NoAuthorization(RespondCode.FORBIDDEN);
@@ -180,7 +180,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Override
     public ArticleListVO getMyArticleList(int page, int size) {
-        int userId = UserContext.getUserId();
+        Integer userId = UserContext.getUserId();
         PageHelper.startPage(page, size);
         List<Article> articles = articleMapper.getMyArticleList(userId);
         PageInfo<Article> pageInfo = new PageInfo<>(articles);

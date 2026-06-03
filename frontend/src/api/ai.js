@@ -29,8 +29,8 @@ export function getMessages(conversationId) {
 
 export function streamChat(conversationId, message, agentId, signal) {
   const params = new URLSearchParams({ message })
-  if (conversationId) params.set('conversationId', conversationId)
-  if (agentId) params.set('agentId', agentId)
+  if (conversationId) params.set('ConversationId', conversationId)
+  if (agentId) params.set('AgentId', agentId)
   return fetch(`${BASE}/ai/chat/stream?${params}`, { headers: headers(), signal })
 }
 
