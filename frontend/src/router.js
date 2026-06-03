@@ -9,6 +9,7 @@ import User from '@/components/user/user.vue'
 import LoginView from '@/components/user/auth/LoginView.vue'
 import RegisterView from '@/components/user/auth/RegisterView.vue'
 import UserProfile from '@/components/user/auth/UserProfile.vue'
+import AiChatPage from '@/components/user/ai/AiChatPage.vue'
 
 const routes = [
   { path: '/', redirect: '/User/1/home' },
@@ -16,6 +17,7 @@ const routes = [
   { path: '/register', name: 'Register', component: RegisterView },
   { path: '/article/:id', name: 'ArticleDetail', component: ArticleDetail },
   { path: '/editor', name: 'Editor', component: MdEditor, meta: { requiresAuth: true } },
+  { path: '/ai', name: 'AiChat', component: AiChatPage, meta: { requiresAuth: true } },
   {
     path: '/User/:id',
     component: User,

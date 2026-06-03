@@ -30,6 +30,12 @@ function handleLogout() {
         <router-link to="/User/1/home">首页</router-link>
         <router-link to="/User/1/list">发现</router-link>
         <router-link to="/User/1/articles">我的文章</router-link>
+        <router-link to="/ai" class="ai-nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ai-nav-icon">
+            <path d="M12 2a4 4 0 0 1 3.5 2.1L12 12l3.5 7.9A4 4 0 0 1 12 22a4 4 0 0 1-3.5-2.1L12 12 8.5 4.1A4 4 0 0 1 12 2z"/>
+          </svg>
+          AI
+        </router-link>
         <el-dropdown trigger="click" class="user-dropdown">
           <el-avatar
             v-if="state.avatarUrl"
@@ -130,6 +136,17 @@ function handleLogout() {
 .btn-register:hover {
   background: var(--c-primary-dark) !important;
   color: #fff !important;
+}
+
+.ai-nav-link {
+  display: flex !important;
+  align-items: center;
+  gap: 5px;
+}
+
+.ai-nav-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .user-dropdown { margin-left: 6px; }
