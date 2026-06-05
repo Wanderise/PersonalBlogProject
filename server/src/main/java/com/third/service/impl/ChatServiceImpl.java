@@ -15,19 +15,24 @@ import com.third.pojo.vo.AIMessageVO;
 import com.third.pojo.vo.AgentVO;
 import com.third.pojo.vo.ConversationsVO;
 import com.third.service.ChatService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.protocols.query.internal.marshall.ListQueryMarshaller;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.baomidou.mybatisplus.extension.ddl.DdlScriptErrorHandler.PrintlnLogErrorHandler.log;
+
 @Service
+@Slf4j
 public class ChatServiceImpl implements ChatService {
     @Autowired
     ConversationMapper conversationMapper;
@@ -90,6 +95,10 @@ public class ChatServiceImpl implements ChatService {
         LambdaQueryWrapper<Conversations> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Conversations::getId, id);
         conversationMapper.delete(wrapper);
+        LambdaQueryWrapper<AIMessage> wrapper1 = new LambdaQueryWrapper<>();
+        wrapper1.eq(AIMessage::getConversationId, id);
+        messageMapper.delete(wrapper1);
+
     }
 
     @Override
@@ -97,6 +106,7 @@ public class ChatServiceImpl implements ChatService {
         LambdaQueryWrapper<AIMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AIMessage::getConversationId, id);
         List<AIMessage> aiMessages = messageMapper.selectList(wrapper);
+        log.info("aiMessageInfo:{}", aiMessages);
         return aiMessages.stream().map(message -> "user".equals(message.getRole()) ? new UserMessage(message.getContent()) : new AssistantMessage(message.getContent())
         ).collect(Collectors.toList());
 

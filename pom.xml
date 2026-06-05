@@ -29,6 +29,7 @@
         <jjwt>0.12.6</jjwt>
         <fastjson>1.2.76</fastjson>
         <pagehelper>6.1.0</pagehelper>
+        <dashscope>1.1.2.0</dashscope>
     </properties>
     <modules>
         <module>server</module>
@@ -121,6 +122,13 @@
             </dependency>
 
 
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
+                <version>${dashscope}</version>
+            </dependency>
+
+
         </dependencies>
     </dependencyManagement>
     <repositories>
@@ -142,6 +150,10 @@
             <snapshots>
                 <enabled>true</enabled>
             </snapshots>
+        </repository>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
         </repository>
     </repositories>
     <build>

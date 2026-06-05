@@ -1,20 +1,27 @@
 package com.third.controller;
 
+import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.third.common.result.Result;
 import com.third.pojo.dto.AIMessage;
 import com.third.pojo.dto.AgentDTO;
 import com.third.pojo.dto.ConversationsDTO;
+import com.third.pojo.entity.Article;
 import com.third.pojo.entity.Conversations;
 import com.third.pojo.vo.AIMessageVO;
 import com.third.pojo.vo.AgentVO;
+import com.third.pojo.vo.ArticleVO;
 import com.third.pojo.vo.ConversationsVO;
+import com.third.service.ArticleService;
 import com.third.service.ChatService;
+import com.third.service.FileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.deepseek.DeepSeekChatModel;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -37,10 +44,22 @@ public class ChatController {
     }
 
     @Autowired
-    ChatService chatService;
+    private ChatService chatService;
 
     @Autowired
-    ChatClient chatClient;
+    private ArticleService articleService;
+
+    @Autowired
+    private FileService fileService;
+
+    @Autowired
+    private ChatClient chatClient;
+
+    @Autowired
+    private EmbeddingModel embeddingModel;
+
+    @Autowired
+    private VectorStore vectorStore;
 
     public void save(String content, Integer conversationId){
         AIMessage aiMessage = new AIMessage();
@@ -118,16 +137,36 @@ public class ChatController {
 
 
     @GetMapping(value = "/chat/stream", produces = "text/html;charset=UTF-8")
-    public Flux<String> generateStream(String message, Integer ConversationId, Integer AgentId) {
+    public Flux<String> generateStream(String message, Integer conversationId, Integer agentId, String articleIds, String fileKeys ) {
         List<AgentVO> agentList = chatService.getAgents();
+//        获取agent提示词
         String prompt = "你是一个有帮助的AI助手";
         for (AgentVO agentVO : agentList) {
-            if (agentVO.getId().longValue() != AgentId)
+            if (agentVO.getId().equals(agentId))
                 continue;
             prompt = agentVO.getSystemPrompt();
         }
-        List<Message> messages = chatService.getConversationMessages(ConversationId);
-        save(message, ConversationId);
-        return chatClient.prompt(prompt).user(message).messages(messages).stream().content();
+
+//        获取文章
+        List<ArticleVO> articles = new ArrayList<>();
+        JSON.parseArray(articleIds).forEach(articleId -> {articles.add(articleService.getArticleById((Integer) articleId));});
+
+        List<String> fileKeyList = new ArrayList<>();
+        JSON.parseArray(fileKeys).forEach(key -> {fileKeyList.add(key.toString());});
+
+
+
+        List<Message> messages = chatService.getConversationMessages(conversationId);
+        log.info("getConversationMessages: {}", messages);
+        save(message, conversationId);
+        StringBuilder stringBuilder = new StringBuilder();
+        return chatClient.prompt(prompt).user(message).messages(messages).stream().content().doOnNext(stringBuilder::append).doOnComplete(() ->{
+            AIMessage aiMessage = new AIMessage();
+            aiMessage.setRole("assistant");
+            aiMessage.setContent(stringBuilder.toString());
+            aiMessage.setConversationId(conversationId);
+            aiMessage.setGmtCreate(LocalDateTime.now());
+            chatService.saveMessage(aiMessage);
+        });
     }
 }

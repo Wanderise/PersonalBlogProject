@@ -15,7 +15,7 @@
           </svg>
         </div>
         <h3>{{ agentGreeting }}</h3>
-        <p>开始一段新的对话吧</p>
+        <p>开始一段新的对话吧，可以附带文章或文件作为上下文</p>
       </div>
 
       <div
@@ -30,6 +30,12 @@
         </div>
         <div class="msg-bubble">
           <div class="markdown-body" v-html="renderMarkdown(msg.content)" />
+          <div v-if="msg.attachments?.length" class="msg-attach-tags">
+            <span v-for="(att, j) in msg.attachments" :key="j" class="msg-attach-tag">
+              <el-icon><Document v-if="att.type === 'article'" /><FolderOpened v-else /></el-icon>
+              {{ att.name }}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -46,7 +52,37 @@
     </div>
 
     <div class="chat-input-area">
+      <div class="attach-chips" v-if="attachments.length">
+        <div v-for="(att, i) in attachments" :key="i" class="attach-chip">
+          <el-icon v-if="att.type === 'article'"><Document /></el-icon>
+          <el-icon v-else><FolderOpened /></el-icon>
+          <span class="chip-name">{{ att.name }}</span>
+          <el-icon class="chip-remove" @click="removeAttachment(i)"><CircleClose /></el-icon>
+        </div>
+      </div>
       <div class="input-wrapper">
+        <el-popover
+          v-model:visible="showAttachMenu"
+          placement="top-start"
+          :width="170"
+          trigger="click"
+        >
+          <template #reference>
+            <el-button class="attach-btn" text circle size="small" :disabled="streaming">
+              <el-icon :size="18"><CirclePlus /></el-icon>
+            </el-button>
+          </template>
+          <div class="attach-menu">
+            <div class="attach-option" @click="openArticleSelector">
+              <el-icon :size="16"><Document /></el-icon>
+              <span>选择文章</span>
+            </div>
+            <div class="attach-option" @click="openFilePicker">
+              <el-icon :size="16"><FolderOpened /></el-icon>
+              <span>上传文件</span>
+            </div>
+          </div>
+        </el-popover>
         <textarea
           ref="inputRef"
           v-model="inputText"
@@ -59,24 +95,70 @@
         ></textarea>
         <el-button
           class="send-btn"
-          :type="inputText.trim() ? 'primary' : 'default'"
+          :type="canSend ? 'primary' : 'default'"
           circle
           size="small"
-          :disabled="!inputText.trim() || streaming"
+          :disabled="!canSend || streaming"
           @click="send"
         >
           <el-icon><Promotion /></el-icon>
         </el-button>
       </div>
-      <p class="input-hint">AI 回答可能存在错误，请注意甄别</p>
+      <p class="input-hint">AI 回答可能存在错误，请注意甄别。可附带文章/文件作为上下文</p>
+
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept=".pdf,.doc,.docx,.txt"
+        style="display:none"
+        @change="handleFileChange"
+      />
     </div>
+
+    <!-- 文章选择弹窗 -->
+    <el-dialog v-model="showArticleDialog" title="选择文章作为上下文" width="560px" :close-on-click-modal="false">
+      <el-input
+        v-model="articleSearch"
+        placeholder="搜索文章标题..."
+        clearable
+        class="article-search"
+        :prefix-icon="Search"
+      />
+      <div class="article-list" v-loading="articleLoading">
+        <el-checkbox-group v-model="selectedArticleIds">
+          <div
+            v-for="article in filteredArticles"
+            :key="article.id"
+            class="article-item"
+            :class="{ checked: selectedArticleIds.includes(article.id) }"
+          >
+            <el-checkbox :value="article.id">
+              <span class="article-title">{{ article.title }}</span>
+              <span class="article-summary">{{ article.summary?.slice(0, 60) || '暂无摘要' }}</span>
+            </el-checkbox>
+          </div>
+        </el-checkbox-group>
+        <div v-if="!filteredArticles.length" class="article-empty">
+          {{ articles.length ? '无匹配文章' : '暂无文章，请先发布' }}
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showArticleDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!selectedArticleIds.length" @click="confirmArticles">
+          确认添加 ({{ selectedArticleIds.length }})
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { Expand, Promotion } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Expand, Promotion, CirclePlus, Document, FolderOpened, CircleClose, Search } from '@element-plus/icons-vue'
 import { marked } from 'marked'
+import { getMyArticles } from '@/api/article.js'
+import { getUploadUrl } from '@/api/file.js'
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
@@ -92,10 +174,29 @@ const inputText = ref('')
 const inputRef = ref(null)
 const msgContainer = ref(null)
 const scrollAnchor = ref(null)
+const fileInputRef = ref(null)
+
+const attachments = ref([])
+const showAttachMenu = ref(false)
+const showArticleDialog = ref(false)
+const articleSearch = ref('')
+const articleLoading = ref(false)
+const selectedArticleIds = ref([])
+const articles = ref([])
+
+const canSend = computed(() => {
+  return (inputText.value.trim() || attachments.value.length) && !props.streaming
+})
 
 const agentGreeting = computed(() => {
   const map = { general: '你好！我是通用助手', coder: '你好！我是代码专家', writer: '你好！我是写作助手' }
   return map[props.agent] || '你好！有什么可以帮你的？'
+})
+
+const filteredArticles = computed(() => {
+  if (!articleSearch.value) return articles.value
+  const kw = articleSearch.value.toLowerCase()
+  return articles.value.filter(a => a.title.toLowerCase().includes(kw))
 })
 
 function renderMarkdown(text) {
@@ -117,10 +218,11 @@ function scrollBottom() {
 }
 
 function handleEnter() {
+  if (!canSend.value) return
   const text = inputText.value.trim()
-  if (!text || props.streaming) return
-  emit('send', text)
+  emit('send', { text, attachments: [...attachments.value] })
   inputText.value = ''
+  attachments.value = []
   nextTick(() => {
     if (inputRef.value) { inputRef.value.style.height = 'auto' }
   })
@@ -128,6 +230,77 @@ function handleEnter() {
 
 function send() {
   handleEnter()
+}
+
+function removeAttachment(i) {
+  attachments.value.splice(i, 1)
+}
+
+async function openArticleSelector() {
+  showAttachMenu.value = false
+  articleLoading.value = true
+  showArticleDialog.value = true
+  try {
+    const res = await getMyArticles({ page: 1, size: 200 })
+    articles.value = res.data?.articles || []
+  } catch { /* ignore */ }
+  articleLoading.value = false
+}
+
+function confirmArticles() {
+  const selected = articles.value.filter(a => selectedArticleIds.value.includes(a.id))
+  for (const article of selected) {
+    if (!attachments.value.find(a => a.type === 'article' && a.id === article.id)) {
+      attachments.value.push({ type: 'article', id: article.id, name: article.title })
+    }
+  }
+  selectedArticleIds.value = []
+  articleSearch.value = ''
+  showArticleDialog.value = false
+}
+
+function openFilePicker() {
+  showAttachMenu.value = false
+  fileInputRef.value?.click()
+}
+
+async function handleFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+
+  const allowed = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ]
+  if (!allowed.includes(file.type)) {
+    ElMessage.warning('仅支持 PDF、Word、TXT 文件')
+    e.target.value = ''
+    return
+  }
+
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const userId = user.id || 0
+    const objectKey = `rag/${userId}_${Date.now()}_${file.name}`
+
+    const urlRes = await getUploadUrl({ objectKey, contentType: file.type })
+    const uploadUrl = urlRes.data.uploadUrl
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type }
+    })
+    if (!uploadRes.ok) throw new Error('Upload failed')
+
+    attachments.value.push({ type: 'file', key: objectKey, name: file.name })
+  } catch {
+    ElMessage.error('文件上传失败，请重试')
+  }
+
+  e.target.value = ''
 }
 
 watch(() => props.messages.length, scrollBottom)
@@ -362,6 +535,145 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .chat-textarea::placeholder { color: var(--c-text-muted); }
 
 .send-btn { flex-shrink: 0; }
+
+/* ========== 附件 ========== */
+
+.attach-btn {
+  flex-shrink: 0;
+  color: var(--c-text-muted);
+  transition: color 0.15s;
+}
+
+.attach-btn:hover { color: var(--c-primary); }
+
+.attach-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attach-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 14px;
+  color: var(--c-text);
+}
+
+.attach-option:hover { background: var(--c-primary-light); color: var(--c-primary); }
+
+.attach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 0 10px;
+}
+
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 10px;
+  border-radius: 8px;
+  background: var(--c-primary-light);
+  color: var(--c-primary);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.attach-chip .chip-name {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-remove {
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.chip-remove:hover { opacity: 1; color: #ef4444; }
+
+/* ========== 消息内附件标签 ========== */
+
+.msg-attach-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(124, 58, 237, 0.12);
+}
+
+.msg-attach-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: rgba(124, 58, 237, 0.08);
+  color: var(--c-primary);
+}
+
+/* ========== 文章选择弹窗 ========== */
+
+.article-search { margin-bottom: 14px; }
+
+.article-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.article-item {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.article-item:hover { background: #f5f4f8; }
+
+.article-item.checked {
+  background: var(--c-primary-light);
+  border-color: rgba(124, 58, 237, 0.2);
+}
+
+.article-item .article-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.article-item .article-summary {
+  display: block;
+  font-size: 12px;
+  color: var(--c-text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.article-empty {
+  text-align: center;
+  padding: 32px;
+  color: var(--c-text-muted);
+  font-size: 14px;
+}
 
 .input-hint {
   text-align: center;

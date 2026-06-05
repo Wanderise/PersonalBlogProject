@@ -27,10 +27,12 @@ export function getMessages(conversationId) {
 
 /* ========== 流式对话 ========== */
 
-export function streamChat(conversationId, message, agentId, signal) {
+export function streamChat(conversationId, message, agentId, articleIds, fileKeys, signal) {
   const params = new URLSearchParams({ message })
-  if (conversationId) params.set('ConversationId', conversationId)
-  if (agentId) params.set('AgentId', agentId)
+  if (conversationId) params.set('conversationId', conversationId)
+  if (agentId) params.set('agentId', agentId)
+  if (articleIds?.length) params.set('articleIds', articleIds.join(','))
+  if (fileKeys?.length) params.set('fileKeys', fileKeys.join(','))
   return fetch(`${BASE}/ai/chat/stream?${params}`, { headers: headers(), signal })
 }
 

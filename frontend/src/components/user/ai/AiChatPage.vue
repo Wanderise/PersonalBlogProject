@@ -138,24 +138,32 @@ function handleAgentChange(id) {
   selectedAgent.value = id
 }
 
-async function handleSend(text) {
+async function handleSend({ text, attachments }) {
   if (!activeConvId.value) return
   const convId = activeConvId.value
 
-  messages.value.push({ role: 'user', content: text })
+  const attList = attachments || []
+  messages.value.push({
+    role: 'user',
+    content: text || '(发送了附件)',
+    attachments: attList.map(a => ({ type: a.type, name: a.name }))
+  })
 
   if (!activeConv.value || activeConv.value.title === '新对话') {
-    const title = text.slice(0, 30) + (text.length > 30 ? '...' : '')
+    const title = text ? (text.slice(0, 30) + (text.length > 30 ? '...' : '')) : '附件对话'
     const conv = conversations.value.find(c => c.id === convId)
     if (conv) conv.title = title
   }
+
+  const articleIds = attList.filter(a => a.type === 'article').map(a => a.id)
+  const fileKeys = attList.filter(a => a.type === 'file').map(a => a.key)
 
   streaming.value = true
   streamContent.value = ''
 
   try {
     abortCtrl = new AbortController()
-    const response = await streamChat(convId, text, selectedAgent.value, abortCtrl.signal)
+    const response = await streamChat(convId, text || '请参考附件内容', selectedAgent.value, articleIds, fileKeys, abortCtrl.signal)
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
 

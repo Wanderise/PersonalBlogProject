@@ -522,25 +522,114 @@ GET /article/my?page=1&size=10
 ### 4.1 流式对话
 
 ```
-POST /ai/chat/stream?conversationId=1&agentId=2&message=你好
+GET /ai/chat/stream?message=你好&conversationId=1&agentId=2&articleIds=1,3&fileKeys=rag/1_xxx.pdf
 认证: 是
+Authorization: Bearer {token}
 ```
 
-**请求参数:**
+> 核心 AI 聊天接口。前端使用 `ReadableStream` 逐块读取 AI 生成内容，实时渲染 Markdown，非标准 SSE 协议。
+
+---
+
+**请求参数（Query String）:**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| message | String | 是 | 用户消息 |
-| conversationId | Integer | 否 | 会话 ID（新对话不传，后端自动创建） |
-| agentId | Integer | 否 | Agent ID |
+| message | String | 是 | 用户消息文本 |
+| conversationId | Integer | 否 | 会话 ID。首次对话不传，后端自动创建会话 |
+| agentId | Integer | 否 | Agent ID，用于匹配自定义 system prompt。未匹配到时使用默认 prompt |
+| articleIds | String | 否 | 逗号分隔的文章 ID，如 `1,2,3`。后端据此查 `article` 表取正文作为 RAG 上下文 |
+| fileKeys | String | 否 | 逗号分隔的 R2 文件 key，如 `rag/1_xxx.pdf`。后端从 R2 下载并解析文件内容作为 RAG 上下文 |
 
-**响应格式:**`text/event-stream`（SSE），`ReadableStream` 逐块读取渲染 Markdown。
+---
 
-**后端需处理:**
-1. 无 `conversationId` → 创建新会话
-2. 查询最近 10 轮历史 + Agent 的 `systemPrompt` → 拼接上下文
-3. 调用 DeepSeek API 流式生成
-4. 流结束后 user + assistant 消息写入 `ai_message` 表
+**响应格式:**
+
+- `Content-Type: text/html;charset=UTF-8`（非标准 SSE，无 `data:` 前缀）
+- 返回 `Flux<String>` 响应式流，AI 逐 token 输出原始文本
+- 前端通过 `response.body.getReader()` 读取字节流，`TextDecoder` 解码后实时渲染 Markdown
+- 流自然结束即响应完成，无结束标记
+
+**流中示例（raw bytes）:**
+```
+你好！有什么可以帮助你的？根据你提供的文章...
+```
+
+---
+
+**后端处理流程:**
+
+```
+1. 接收参数
+     ├─ conversationId == null → 创建新会话（ai_conversation 表）
+     ├─ agentId != null → 查 ai_agent 表取 systemPrompt
+     └─ 未匹配 → 使用默认 prompt: "你是一个有帮助的AI助手"
+
+2. 构建上下文
+     ├─ 查 ai_message 表取该会话最近消息（历史对话）
+     ├─ articleIds 非空 → 查 article 表取文章正文
+     └─ fileKeys 非空 → 从 R2 下载文件，解析 PDF/Word/TXT 文本
+
+3. 保存用户消息
+     └─ INSERT INTO ai_message (conversation_id, role='user', content=message, gmt_create)
+
+4. 调用 DeepSeek API
+     └─ chatClient.prompt(systemPrompt).user(message).messages(history).stream().content()
+
+5. 流式输出（Flux<String>）
+     └─ 逐 token 写入 Response body
+
+6. 流结束后保存 AI 回复
+     └─ INSERT INTO ai_message (conversation_id, role='assistant', content=完整回复, gmt_create)
+```
+
+---
+
+**前端调用示例:**
+
+```javascript
+// api/ai.js
+export function streamChat(conversationId, message, agentId, articleIds, fileKeys, signal) {
+  const params = new URLSearchParams({ message })
+  if (conversationId) params.set('conversationId', conversationId)
+  if (agentId) params.set('agentId', agentId)
+  if (articleIds?.length) params.set('articleIds', articleIds.join(','))
+  if (fileKeys?.length) params.set('fileKeys', fileKeys.join(','))
+
+  return fetch(`http://localhost:8080/ai/chat/stream?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal
+  })
+}
+
+// 消费流
+const reader = response.body.getReader()
+const decoder = new TextDecoder()
+let buffer = ''
+while (true) {
+  const { done, value } = await reader.read()
+  if (done) break
+  buffer += decoder.decode(value, { stream: true })
+  // 实时更新 UI
+  updateMarkdown(buffer)
+}
+```
+
+---
+
+**架构图:**
+
+```
+┌──────────────┐     GET /ai/chat/stream?message=...      ┌──────────────┐
+│   Vue 前端    │ ──────────────────────────────────────────→│  Spring Boot │
+│              │                                            │              │
+│ ReadableStream│←── Flux<String> (raw text, chunk by chunk) │  ChatController│
+│ TextDecoder  │                                            │       ↓      │
+│ marked.render│                                            │  ChatService │
+└──────────────┘                                            │       ↓      │
+                                                            │  DeepSeek API│
+                                                            └──────────────┘
+```
 
 ---
 

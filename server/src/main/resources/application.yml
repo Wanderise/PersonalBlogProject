@@ -1,6 +1,10 @@
 spring:
   application:
     name: server
+  autoconfigure:
+    exclude:
+      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAudioSpeechAutoConfiguration
+      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAudioTranscriptionAutoConfiguration
   profiles:
     active: dev
   datasource:
@@ -11,6 +15,16 @@ spring:
       chat:
         options:
           model: deepseek-v4-flash
+    dashscope:
+      embedding:
+        enabled: true
+        options:
+          model: text-embedding-v4
+    vectorstore:
+      qdrant:
+        host: localhost
+        port: 6334
+        collection-name: my-collection
 
 
 knife4j:
@@ -27,6 +41,7 @@ r2:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       id-type: auto

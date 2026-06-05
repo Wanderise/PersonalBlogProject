@@ -125,7 +125,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         log.info("Articles:{}", Articles);
         articleListVO.setPage(pageInfo.getPageNum());
         articleListVO.setTotal(pageInfo.getPages());
-        articleListVO.setSize(pageInfo.getPages());
+        articleListVO.setSize(pageInfo.getSize());
         List<ArticleVO> articleVOList = new ArrayList<>();
         for (Article article : Articles) {
             ArticleVO articleVO = articleToVO(article);
