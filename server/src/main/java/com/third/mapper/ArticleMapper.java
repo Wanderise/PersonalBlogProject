@@ -22,7 +22,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
     @Insert("insert into blog.article(writer_id, gmt_create, gmt_modified, content, title, image) "+
             "values (#{writerId}, #{gmtCreate}, #{gmtModified}, #{content}, #{title}, #{image})")
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
-    int addArticle(Article articleEntity);
+    void addArticle(Article articleEntity);
 
     @Insert("insert ignore into blog.article_tag(article_id, tag_id) VALUES (#{articleId}, #{tagId})")
     void addArticleTag(Integer articleId, Integer tagId);
@@ -54,8 +54,10 @@ public interface ArticleMapper extends BaseMapper<Article> {
     @Delete("delete from blog.tag where id = #{tagId}")
     void deleteTagById(Integer tagId);
 
-    @Update("update blog.article set title = #{title}, content = #{content}, image = #{image}, gmt_modified = #{gmtModified} where id = #{id}")
+    @Update("update blog.article set title = #{title}, content = #{content}, image = #{image}, gmt_modified = #{gmtModified}, version = #{version} where id = #{id}")
     void updateArticle(Article article);
 
     List<Article> getMyArticleList(Integer userId);
+
+
 }

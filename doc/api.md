@@ -315,12 +315,14 @@ POST /article/add
 | content | String | 是 | Markdown 正文 |
 | tag | List\<String\> | 否 | 标签列表 |
 | image | List\<String\> | 否 | 配图 objectKey 数组 |
+| version | Double | 否 | 版本号，保留两位小数。不传则自动取当前版本 + 0.1 |
 
 ```json
 {
   "title": "Spring Boot 入门",
   "content": "# 第一章\n...",
   "tag": ["Java", "Spring"],
+  "version": 1.0,
   "image": ["covers/1_1684512000000.jpg"]
 }
 ```
@@ -334,7 +336,8 @@ POST /article/add
 **后端需处理:**
 1. `writerId` 从 token 获取
 2. `tag` 写入 `article_tag` 和 `tag` 表
-3. `gmtCreate` = `gmtModified` = 当前时间
+3. `version` 默认 1.0，若前端未传则取 `article` 表当前版本 + 0.1
+4. `gmtCreate` = `gmtModified` = 当前时间
 
 ---
 
@@ -345,13 +348,14 @@ PUT /article/{id}
 认证: 是
 ```
 
-**请求体:** 同 3.1
+**请求体:** 同 3.1，含 `version`
 
 ```json
 {
   "title": "Spring Boot 入门（修订版）",
   "content": "# 第一章\n...",
   "tag": ["Java", "Spring Boot"],
+  "version": 1.1,
   "image": ["covers/1_1684512000000.jpg"]
 }
 ```
@@ -368,11 +372,12 @@ PUT /article/{id}
 { "code": 400, "msg": "只能修改自己的文章", "data": null }
 ```
 
-## 后端需处理:**
+**后端需处理:**
 1. 校验当前用户是否为作者
-2. **先将当前文章内容写入 `article_version` 表（自动归档旧版本）**
-3. 更新 `article` 表 + 重建 `article_tag` 关联
-4. 更新 `gmtModified`
+2. 先将当前文章内容写入 `article_version` 表（自动归档旧版本，使用当前 `article.version` 作为 `version_number`）
+3. 用请求中的 `version` 更新 `article.version`（未传则当前版本 + 0.1）
+4. 更新 `article` 表 + 重建 `article_tag` 关联
+5. 更新 `gmtModified`
 
 ---
 
@@ -527,9 +532,9 @@ GET /article/{id}/versions
 {
   "code": 200, "msg": null,
   "data": [
-    { "versionId": 3, "versionNumber": 3, "title": "Spring Boot 入门（最新版）", "summary": "...", "gmtCreate": "2026-06-05T16:00:00" },
-    { "versionId": 2, "versionNumber": 2, "title": "Spring Boot 入门（修订版）", "summary": "...", "gmtCreate": "2026-06-04T10:00:00" },
-    { "versionId": 1, "versionNumber": 1, "title": "Spring Boot 入门", "summary": "...", "gmtCreate": "2026-06-03T08:00:00" }
+    { "versionId": 3, "versionNumber": 1.2, "title": "Spring Boot 入门（最新版）", "summary": "...", "gmtCreate": "2026-06-05T16:00:00" },
+    { "versionId": 2, "versionNumber": 1.1, "title": "Spring Boot 入门（修订版）", "summary": "...", "gmtCreate": "2026-06-04T10:00:00" },
+    { "versionId": 1, "versionNumber": 1.0, "title": "Spring Boot 入门", "summary": "...", "gmtCreate": "2026-06-03T08:00:00" }
   ]
 }
 ```
@@ -562,9 +567,9 @@ POST /article/{id}/versions/{versionId}/rollback
 
 **后端需处理:**
 1. 校验当前用户是否为作者
-2. 将当前文章内容存为新版本（`version_number = max + 1`）
-3. 用目标版本的内容覆盖 `article` 表（`title`、`content`、`tag` 等）
-4. 更新 `gmt_modified`
+2. 用目标版本的内容直接覆盖 `article` 表（`title`、`content`、`tag`），`version` 回到目标版本号
+3. 更新 `gmt_modified`
+4. 当前内容不归档，直接丢弃
 
 ---
 
@@ -581,7 +586,7 @@ GET /article/{id}/versions/{versionId}
 {
   "code": 200, "msg": null,
   "data": {
-    "versionId": 2, "versionNumber": 2,
+    "versionId": 2, "versionNumber": 1.1,
     "title": "Spring Boot 入门（修订版）",
     "content": "# 第一章\n...",
     "tag": ["Java", "Spring Boot"],
@@ -590,11 +595,21 @@ GET /article/{id}/versions/{versionId}
 }
 ```
 
+**后端需处理:**
+1. 校验当前用户是否为作者
+2. 从 `article_version` 表查询对应版本返回
+
 ---
 
 ### 3.10 版本管理设计
 
 **编辑文章时自动创建版本:** 调用 `PUT /article/{id}` 编辑文章时，后端先将当前内容写入 `article_version` 表，再更新 `article` 表。**前端无需改动。**
+
+**article 表新增字段:**
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| version | DOUBLE(10,2) | 当前版本号，保留两位小数，默认 1.0 |
 
 **article_version 表:**
 
@@ -602,15 +617,17 @@ GET /article/{id}/versions/{versionId}
 |------|------|------|
 | id | BIGINT PK | |
 | article_id | BIGINT FK | 关联 article.id |
-| version_number | INT | 版本号，同篇文章下递增 |
+| version_number | DOUBLE(10,2) | 版本号，由前端设定或后端自动 +0.1 |
 | title | VARCHAR(100) | 该版本标题 |
 | content | TEXT | 该版本 Markdown 正文 |
 | tag | VARCHAR(500) | 该版本标签（JSON 数组序列化） |
 | gmt_create | DATETIME | 创建时间（即该版本的归档时间） |
 
-**回滚实现要点:**
-- 回滚不是删除中间版本，而是以当前内容创建一个新版本号，再将旧版本内容恢复到主表
-- 这样回滚操作本身也是可追溯的
+**版本号规则:**
+- 新建文章默认 1.0
+- 每次编辑时前端可指定新版本号，未指定则自动 +0.1
+- 回滚操作直接将目标版本内容覆盖 `article` 表，`version` 回到目标版本号，当前内容不归档
+- 版本号精确到两位小数，前端可直接输入如 1.0、1.1、2.5
 
 ---
 

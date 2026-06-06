@@ -4,6 +4,7 @@ import com.third.common.result.Result;
 import com.third.pojo.dto.ArticleAddDTO;
 import com.third.pojo.vo.ArticleListVO;
 import com.third.pojo.vo.ArticleVO;
+import com.third.pojo.vo.ArticleVersionVO;
 import com.third.service.ArticleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,7 +60,7 @@ public class ArticleController {
         return Result.success();
     }
 
-    @PutMapping("{id}")
+    @PutMapping("/{id}")
     public Result updateArticle(@PathVariable("id") Integer id, @RequestBody ArticleAddDTO articleAddDTO) {
         log.info("更新文章:" + id);
         articleService.updateArticleById(id, articleAddDTO);
@@ -72,6 +73,27 @@ public class ArticleController {
         ArticleListVO articleListVO = articleService.getMyArticleList(page, size);
         return Result.success(articleListVO);
 
+    }
+
+    @GetMapping("/{id}/versions")
+    public Result<List<ArticleVersionVO>> getVersions(@PathVariable("id") Integer id) {
+        log.info("获取文章{}历史版本。", id);
+        List<ArticleVersionVO> articleVersionVOS = articleService.getVersions(id);
+        return Result.success(articleVersionVOS);
+    }
+
+    @GetMapping("/{id}/versions/{versionId}")
+    public Result<ArticleVersionVO> getVersion(@PathVariable("id") Integer id,  @PathVariable("versionId") Integer versionId) {
+        log.info("正在获取文章{}的{}版本", id, versionId);
+        ArticleVersionVO articleVersionVO = articleService.getVersion(id, versionId);
+        return Result.success(articleVersionVO);
+    }
+
+    @PostMapping("/{id}/versions/{versionId}/rollback")
+    public Result<ArticleVersionVO> rollbackVersion(@PathVariable("id") Integer id, @PathVariable("versionId") Integer versionId) {
+        log.info("正在回滚文章{}，{}版本", id, versionId);
+        ArticleVersionVO articleVersionVO = articleService.rollbackVersion(id, versionId);
+        return Result.success(articleVersionVO);
     }
 
 }

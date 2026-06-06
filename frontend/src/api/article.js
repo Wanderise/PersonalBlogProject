@@ -45,3 +45,17 @@ export function getMyArticles(params) {
     params
   })
 }
+
+/* ========== 版本管理 ========== */
+
+export function getArticleVersions(id) {
+  return request({ url: `/article/${id}/versions`, method: 'GET' })
+}
+
+export function getArticleVersion(id, versionId) {
+  return request({ url: `/article/${id}/versions/${versionId}`, method: 'GET' })
+}
+
+export function rollbackArticleVersion(id, versionId) {
+  return request({ url: `/article/${id}/versions/${versionId}/rollback`, method: 'POST' })
+}

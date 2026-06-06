@@ -24,6 +24,19 @@
           size="large"
         />
       </div>
+      <div class="form-section version-col">
+        <label class="section-label">版本号</label>
+        <el-input-number
+          v-model="article.version"
+          :min="0.01"
+          :precision="2"
+          :step="0.1"
+          size="large"
+          controls-position="right"
+          placeholder="1.0"
+          class="version-input"
+        />
+      </div>
       <div class="form-section">
         <label class="section-label">文章图片</label>
         <ImageUploader ref="uploaderRef" :existing-images="existingImagesWithUrls" />
@@ -77,7 +90,7 @@ const router = useRouter()
 const editId = route.query.edit ? Number(route.query.edit) : null
 const isEdit = !!editId
 
-const article = reactive({ title: '', text: '', tags: [] })
+const article = reactive({ title: '', text: '', tags: [], version: 1.0 })
 const existingImages = ref([])
 const existingImagesWithUrls = computed(() => {
   return existingImages.value.map((key, i) => ({
@@ -105,6 +118,7 @@ onMounted(async () => {
       article.title = data.title || ''
       article.text = data.content || ''
       article.tags = data.tag || []
+      article.version = data.version != null ? data.version : 1.0
       existingImages.value = data.image || []
       existingImageUrls.value = data.imageUrls || []
     } catch {
@@ -142,6 +156,7 @@ async function submit() {
       title: article.title,
       content: article.text,
       tag: article.tags,
+      version: article.version,
       image: imageKeys
     }
 
@@ -199,6 +214,10 @@ async function submit() {
 }
 
 .form-grow { flex: 1; min-width: 0; }
+
+.version-col { flex-shrink: 0; }
+
+.version-input { width: 130px; }
 
 .upload-status {
   margin: 16px 0;

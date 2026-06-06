@@ -50,6 +50,8 @@ public class Article implements Serializable {
 
     private String content;
 
+    private Double version;
+
     private String image;
 
     private String title;

@@ -13,6 +13,7 @@ public class ArticleVO {
     private String writerName;
     private String title;
     private String content;
+    private Double version;
     private LocalDateTime gmtCreate;
     private LocalDateTime gmtModified;
     private List<String> image;

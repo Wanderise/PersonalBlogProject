@@ -5,6 +5,7 @@ import com.third.pojo.entity.Article;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.third.pojo.vo.ArticleListVO;
 import com.third.pojo.vo.ArticleVO;
+import com.third.pojo.vo.ArticleVersionVO;
 
 import java.util.List;
 
@@ -29,4 +30,10 @@ public interface ArticleService extends IService<Article> {
     void updateArticleById(Integer id, ArticleAddDTO articleAddDTO);
 
     ArticleListVO getMyArticleList(int page, int size);
+
+    List<ArticleVersionVO> getVersions(Integer id);
+
+    ArticleVersionVO rollbackVersion(Integer id, Integer versionId);
+
+    ArticleVersionVO getVersion(Integer id, Integer versionId);
 }
