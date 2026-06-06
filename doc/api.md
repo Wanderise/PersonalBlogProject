@@ -368,10 +368,11 @@ PUT /article/{id}
 { "code": 400, "msg": "只能修改自己的文章", "data": null }
 ```
 
-**后端需处理:**
+## 后端需处理:**
 1. 校验当前用户是否为作者
-2. 更新 `article` 表 + 重建 `article_tag` 关联
-3. 更新 `gmtModified`
+2. **先将当前文章内容写入 `article_version` 表（自动归档旧版本）**
+3. 更新 `article` 表 + 重建 `article_tag` 关联
+4. 更新 `gmtModified`
 
 ---
 
@@ -513,6 +514,106 @@ GET /article/my?page=1&size=10
 
 ---
 
+### 3.7 文章版本历史
+
+```
+GET /article/{id}/versions
+认证: 是
+```
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": [
+    { "versionId": 3, "versionNumber": 3, "title": "Spring Boot 入门（最新版）", "summary": "...", "gmtCreate": "2026-06-05T16:00:00" },
+    { "versionId": 2, "versionNumber": 2, "title": "Spring Boot 入门（修订版）", "summary": "...", "gmtCreate": "2026-06-04T10:00:00" },
+    { "versionId": 1, "versionNumber": 1, "title": "Spring Boot 入门", "summary": "...", "gmtCreate": "2026-06-03T08:00:00" }
+  ]
+}
+```
+
+**后端需处理:** 校验当前用户是否为作者，按 `version_number` 降序返回。
+
+---
+
+### 3.8 回滚到指定版本
+
+```
+POST /article/{id}/versions/{versionId}/rollback
+认证: 是
+```
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": {
+    "id": 1, "title": "Spring Boot 入门",
+    "content": "# 第一章\n...",
+    "tag": ["Java", "Spring"],
+    "writerId": 1, "writerName": "zhangsan",
+    "gmtModified": "2026-06-05T17:00:00"
+  }
+}
+```
+
+**后端需处理:**
+1. 校验当前用户是否为作者
+2. 将当前文章内容存为新版本（`version_number = max + 1`）
+3. 用目标版本的内容覆盖 `article` 表（`title`、`content`、`tag` 等）
+4. 更新 `gmt_modified`
+
+---
+
+### 3.9 获取指定版本内容
+
+```
+GET /article/{id}/versions/{versionId}
+认证: 是
+```
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": {
+    "versionId": 2, "versionNumber": 2,
+    "title": "Spring Boot 入门（修订版）",
+    "content": "# 第一章\n...",
+    "tag": ["Java", "Spring Boot"],
+    "gmtCreate": "2026-06-04T10:00:00"
+  }
+}
+```
+
+---
+
+### 3.10 版本管理设计
+
+**编辑文章时自动创建版本:** 调用 `PUT /article/{id}` 编辑文章时，后端先将当前内容写入 `article_version` 表，再更新 `article` 表。**前端无需改动。**
+
+**article_version 表:**
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | BIGINT PK | |
+| article_id | BIGINT FK | 关联 article.id |
+| version_number | INT | 版本号，同篇文章下递增 |
+| title | VARCHAR(100) | 该版本标题 |
+| content | TEXT | 该版本 Markdown 正文 |
+| tag | VARCHAR(500) | 该版本标签（JSON 数组序列化） |
+| gmt_create | DATETIME | 创建时间（即该版本的归档时间） |
+
+**回滚实现要点:**
+- 回滚不是删除中间版本，而是以当前内容创建一个新版本号，再将旧版本内容恢复到主表
+- 这样回滚操作本身也是可追溯的
+
+---
+
 ## 四、AI 聊天模块
 
 > 前端路由: `/ai`。存储由后端负责，前端仅做 UI 渲染。
@@ -522,12 +623,12 @@ GET /article/my?page=1&size=10
 ### 4.1 流式对话
 
 ```
-GET /ai/chat/stream?message=你好&conversationId=1&agentId=2&articleIds=1,3&fileKeys=rag/1_xxx.pdf
+GET /ai/chat/stream?message=你好&conversationId=1&agentId=2&knowledgeBaseIds=1,2
 认证: 是
 Authorization: Bearer {token}
 ```
 
-> 核心 AI 聊天接口。前端使用 `ReadableStream` 逐块读取 AI 生成内容，实时渲染 Markdown，非标准 SSE 协议。
+> 核心 AI 聊天接口。后端自动从指定的知识库中检索相关文本拼入上下文。前端使用 `ReadableStream` 逐块读取 AI 生成内容，实时渲染 Markdown，非标准 SSE 协议。
 
 ---
 
@@ -538,8 +639,7 @@ Authorization: Bearer {token}
 | message | String | 是 | 用户消息文本 |
 | conversationId | Integer | 否 | 会话 ID。首次对话不传，后端自动创建会话 |
 | agentId | Integer | 否 | Agent ID，用于匹配自定义 system prompt。未匹配到时使用默认 prompt |
-| articleIds | String | 否 | 逗号分隔的文章 ID，如 `1,2,3`。后端据此查 `article` 表取正文作为 RAG 上下文 |
-| fileKeys | String | 否 | 逗号分隔的 R2 文件 key，如 `rag/1_xxx.pdf`。后端从 R2 下载并解析文件内容作为 RAG 上下文 |
+| knowledgeBaseIds | String | 否 | 逗号分隔的知识库 ID，如 `1,2`。后端据此检索向量数据库取相关文本拼入上下文 |
 
 ---
 
@@ -824,9 +924,254 @@ DELETE /ai/agents/{id}
 
 ---
 
-## 五、附录
+## 五、RAG 知识库模块
 
-### 5.1 认证总表
+> 基于阿里 DashScope Embedding 实现检索增强生成。
+> 用户上传文件或提交文章 → 后端解析文本 → 分块向量化 → 存入向量库 + R2 + DB → 聊天时自动检索。
+
+---
+
+### 5.1 上传文件到知识库
+
+```
+POST /ai/rag/upload
+认证: 是
+Content-Type: multipart/form-data
+```
+
+**请求体（multipart）:**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| file | File | 是 | PDF/Word/TXT 文件 |
+| knowledgeBaseId | Integer | 是 | 目标知识库 ID |
+| title | String | 否 | 文档标题，不传则用文件名 |
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": {
+    "id": 1,
+    "title": "Spring Boot 实战.pdf",
+    "fileType": "PDF",
+    "r2Key": "knowledge/1_1684512000000_Spring Boot 实战.pdf",
+    "status": "READY",
+    "gmtCreate": "2026-06-05T16:00:00"
+  }
+}
+```
+
+**后端需处理:**
+1. 文件上传到 R2（存储原始文件）
+2. 解析文本（PDF→PDFBox, Word→POI, TXT→直接读）
+3. 文本分块（每块 500-1000 tokens，重叠 100 tokens）
+4. 调用 DashScope Embedding 将每块转为向量
+5. 向量写入向量数据库
+6. 写入 `knowledge_document` 表（`status=READY`）
+
+---
+
+### 5.2 提交文章到知识库
+
+```
+POST /ai/rag/articles
+认证: 是
+```
+
+**请求体:**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| articleIds | List\<Integer\> | 是 | 文章 ID 列表 |
+| knowledgeBaseId | Integer | 是 | 目标知识库 ID |
+
+```json
+{ "articleIds": [1, 2, 3], "knowledgeBaseId": 1 }
+```
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": [
+    { "id": 2, "title": "Spring Boot 入门", "status": "READY" }
+  ]
+}
+```
+
+**后端需处理:**
+1. 根据 `articleIds` 查 `article` 表获取标题和正文
+2. 将 Markdown 正文转为同 5.1 的分块→向量化流程
+3. 同时将文章内容转存为 `.md` 文件上传到 R2
+4. 写入 `knowledge_document` 表
+
+---
+
+### 5.3 知识库管理
+
+#### 5.3.1 创建知识库
+
+```
+POST /ai/knowledge-bases
+认证: 是
+```
+
+**请求体:**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| name | String | 是 | 知识库名称，1-50 字符 |
+| description | String | 否 | 描述 |
+
+```json
+{ "name": "我的知识库", "description": "Java 学习笔记" }
+```
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": { "id": 1, "name": "我的知识库", "description": "...", "docCount": 0, "gmtCreate": "..." }
+}
+```
+
+---
+
+#### 5.3.2 获取知识库列表
+
+```
+GET /ai/knowledge-bases
+认证: 是
+```
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": [
+    { "id": 1, "name": "我的知识库", "description": "...", "docCount": 3, "gmtCreate": "..." }
+  ]
+}
+```
+
+**后端需处理:** 按当前 `userId` 查询，返回该用户所有知识库。
+
+---
+
+#### 5.3.3 删除知识库
+
+```
+DELETE /ai/knowledge-bases/{id}
+认证: 是
+```
+
+**成功响应:**
+
+```json
+{ "code": 200, "msg": null, "data": null }
+```
+
+**后端需处理:**
+1. 校验所有权
+2. 级联删除向量库中该库所有向量
+3. 级联删除 R2 中该库所有源文件
+4. 级联删除 `knowledge_document` 表中该库所有记录
+
+---
+
+### 5.4 知识库文档列表
+
+```
+GET /ai/knowledge-bases/{id}/documents?page=1&size=20
+认证: 是
+```
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": {
+    "total": 5, "page": 1, "size": 20,
+    "documents": [
+      {
+        "id": 1, "title": "Spring Boot 实战.pdf",
+        "fileType": "PDF",
+        "status": "READY",
+        "gmtCreate": "2026-06-05T16:00:00"
+      }
+    ]
+  }
+}
+```
+
+### 5.5 删除单个文档
+
+```
+DELETE /ai/knowledge-bases/{id}/documents/{docId}
+认证: 是
+```
+
+**后端需处理:**
+1. 校验所有权
+2. 从向量库删除该文档所有向量
+3. 从 R2 删除源文件
+4. 从 `knowledge_document` 表删除记录
+
+---
+
+### 5.6 数据模型
+
+**knowledge_base**
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | BIGINT PK | |
+| user_id | BIGINT | 所属用户 |
+| name | VARCHAR(50) | 知识库名称 |
+| description | VARCHAR(200) | 描述 |
+| gmt_create | DATETIME | |
+
+**knowledge_document**
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | BIGINT PK | |
+| knowledge_base_id | BIGINT FK | |
+| title | VARCHAR(100) | 文档标题 |
+| file_type | VARCHAR(10) | PDF/WORD/TXT/MD |
+| r2_key | VARCHAR(255) | R2 存储 key |
+| status | VARCHAR(16) | `PROCESSING` 处理中 / `READY` 就绪 / `ERROR` 失败 |
+| gmt_create | DATETIME | |
+
+> **Embedding:** 阿里 DashScope `text-embedding-v2`（1536 维），Cosine 距离
+
+---
+
+### 5.7 聊天集成流程
+
+```
+用户发送消息
+    → ChatController 接收 knowledgeBaseIds
+    → 校验 knowledgeBaseIds 对应的 knowledge_base.user_id == 当前用户
+    → 对 message 做 DashScope Embedding
+    → 在向量库中检索与 embedding 最相似的 Top-K 文本块
+    → 拼入 system prompt: "参考以下资料回答：\n{chunks}\n\n用户问题：{message}"
+    → 调用 DeepSeek 流式生成
+```
+
+**注：** 聊天接口（4.1）无需前端传文章 ID 或文件 key，仅传 `knowledgeBaseIds` 即可。
+
+---
+
+## 六、附录
+
+### 6.1 认证总表
 
 | 接口 | 认证 |
 |------|------|
@@ -844,9 +1189,12 @@ DELETE /ai/agents/{id}
 | GET /article/list | 否 |
 | GET /article/{id} | 否 |
 | GET /article/my | 是 |
+| GET /article/{id}/versions | 是 |
+| GET /article/{id}/versions/{versionId} | 是 |
+| POST /article/{id}/versions/{versionId}/rollback | 是 |
 | 全部 /ai/* | 是 |
 
-### 5.2 拦截器放行规则
+### 6.2 拦截器放行规则
 
 `JwtInterceptor` 已拦截 `/**`，以下自动放行:
 
@@ -856,44 +1204,11 @@ DELETE /ai/agents/{id}
 - Knife4j 文档路径
 - `OPTIONS` 预检请求
 
-### 5.3 数据库设计建议
-
-**ai_conversation**
-
-| 列 | 类型 | 说明 |
-|------|------|------|
-| id | BIGINT PK | |
-| user_id | BIGINT | |
-| title | VARCHAR(200) | |
-| agent_id | BIGINT | |
-| gmt_create | DATETIME | |
-| gmt_modified | DATETIME | |
-
-**ai_message**
-
-| 列 | 类型 | 说明 |
-|------|------|------|
-| id | BIGINT PK | |
-| conversation_id | BIGINT FK | |
-| role | VARCHAR(20) | USER / ASSISTANT |
-| content | TEXT | |
-| gmt_create | DATETIME | |
-
-**ai_agent**
-
-| 列 | 类型 | 说明 |
-|------|------|------|
-| id | BIGINT PK | |
-| user_id | BIGINT | |
-| name | VARCHAR(50) | |
-| system_prompt | TEXT | |
-| icon | VARCHAR(10) | emoji |
-| gmt_create | DATETIME | |
-
-### 5.4 技术决策记录
+### 6.3 技术决策记录
 
 - **密码**: 当前 MD5，后续迁移 BCrypt
 - **JWT**: jjwt 0.12.6，payload 含 `userId` 和 `name`
 - **分页**: PageHelper 6.1.0 + MyBatis-Plus
 - **文件**: 直传 Cloudflare R2（预签名 URL）
 - **AI**: Spring AI + DeepSeek，流式 SSE
+- **RAG**: 阿里 DashScope text-embedding-v2 Embedding

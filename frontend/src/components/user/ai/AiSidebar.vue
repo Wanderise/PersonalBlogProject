@@ -41,6 +41,33 @@
         </div>
       </div>
 
+      <div class="sidebar-section">
+        <div class="section-head">
+          <span class="section-title">知识库</span>
+          <el-button class="add-agent-btn" text size="small" @click="showAddKb = true">
+            <el-icon><Plus /></el-icon>
+          </el-button>
+        </div>
+        <div class="kb-list" v-if="kbs.length">
+          <div
+            v-for="kb in kbs"
+            :key="kb.id"
+            class="kb-card"
+          >
+            <el-checkbox
+              :model-value="selectedKbIds.includes(kb.id)"
+              @change="toggleKb(kb.id)"
+            />
+            <div class="kb-info" @click="toggleKb(kb.id)">
+              <span class="kb-name">{{ kb.name }}</span>
+              <span class="kb-meta">{{ kb.docCount || 0 }} 篇文档</span>
+            </div>
+            <el-icon class="kb-del" @click.stop="removeKb(kb.id)"><Delete /></el-icon>
+          </div>
+        </div>
+        <div v-else class="conv-empty">暂无知识库</div>
+      </div>
+
       <div class="sidebar-section conversations">
         <div class="section-title">对话历史</div>
         <div class="conv-list" v-if="conversations.length">
@@ -97,6 +124,28 @@
         <el-button type="primary" :disabled="!agentForm.name.trim() || !agentForm.systemPrompt.trim()" @click="saveAgent">创建</el-button>
       </template>
     </el-dialog>
+
+    <!-- 创建知识库弹窗 -->
+    <el-dialog v-model="showAddKb" title="创建知识库" width="400px" :close-on-click-modal="false">
+      <el-form :model="kbForm" label-position="top">
+        <el-form-item label="名称" required>
+          <el-input v-model="kbForm.name" placeholder="例如：Java 学习笔记" maxlength="50" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="kbForm.description"
+            type="textarea"
+            :rows="3"
+            placeholder="可选描述..."
+            maxlength="200"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddKb = false">取消</el-button>
+        <el-button type="primary" :disabled="!kbForm.name.trim()" @click="saveKb">创建</el-button>
+      </template>
+    </el-dialog>
   </aside>
 </template>
 
@@ -104,17 +153,19 @@
 import { ref, reactive, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ChatDotRound, ChatLineSquare, EditPen, Delete, Plus } from '@element-plus/icons-vue'
-import { createAgent, deleteAgent } from '@/api/ai.js'
+import { createAgent, deleteAgent, getKnowledgeBases, createKnowledgeBase, deleteKnowledgeBase } from '@/api/ai.js'
 
 const props = defineProps({
   open: { type: Boolean, default: true },
   activeId: { type: [String, Number], default: null },
   conversations: { type: Array, default: () => [] },
   agents: { type: Array, default: () => [] },
-  selectedAgent: { type: [String, Number], default: null }
+  selectedAgent: { type: [String, Number], default: null },
+  knowledgeBases: { type: Array, default: () => [] },
+  selectedKbIds: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['toggle', 'select', 'new', 'rename', 'delete', 'agentChange', 'refreshAgents'])
+const emit = defineEmits(['toggle', 'select', 'new', 'rename', 'delete', 'agentChange', 'refreshAgents', 'kbsChange', 'refreshKbs'])
 
 const editingId = ref(null)
 const showAddAgent = ref(false)
@@ -173,6 +224,55 @@ async function removeAgent(id) {
     ElMessage.error('删除失败')
   }
 }
+
+/* ========== 知识库 ========== */
+const kbs = ref([])
+const showAddKb = ref(false)
+const kbForm = reactive({ name: '', description: '' })
+
+function toggleKb(id) {
+  const ids = [...props.selectedKbIds]
+  const idx = ids.indexOf(id)
+  if (idx >= 0) ids.splice(idx, 1)
+  else ids.push(id)
+  emit('kbsChange', ids)
+}
+
+async function loadKbs() {
+  try {
+    const res = await getKnowledgeBases()
+    kbs.value = res.data || []
+  } catch { /* ignore */ }
+}
+
+async function saveKb() {
+  try {
+    await createKnowledgeBase({ name: kbForm.name.trim(), description: kbForm.description.trim() })
+    ElMessage.success('知识库已创建')
+    showAddKb.value = false
+    Object.assign(kbForm, { name: '', description: '' })
+    emit('refreshKbs')
+  } catch {
+    ElMessage.error('创建失败')
+  }
+}
+
+async function removeKb(id) {
+  await ElMessageBox.confirm('删除知识库将同时删除其中的所有文档和向量数据', '警告', { type: 'warning' })
+  try {
+    await deleteKnowledgeBase(id)
+    ElMessage.success('已删除')
+    emit('refreshKbs')
+  } catch {
+    ElMessage.error('删除失败')
+  }
+}
+
+function refreshKbs(data) {
+  kbs.value = data || []
+}
+
+defineExpose({ loadKbs, refreshKbs })
 </script>
 
 <style scoped>
@@ -389,4 +489,57 @@ async function removeAgent(id) {
 .close-btn { color: var(--c-text-muted); }
 
 .icon-input { max-width: 120px; }
+
+/* ========== 知识库 ========== */
+
+.kb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.kb-card:hover { background: #ede9f7; }
+
+.kb-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.kb-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kb-meta {
+  font-size: 11px;
+  color: var(--c-text-muted);
+}
+
+.kb-del {
+  font-size: 14px;
+  color: var(--c-text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+
+.kb-card:hover .kb-del { opacity: 1; }
+
+.kb-del:hover { color: #ef4444; }
 </style>

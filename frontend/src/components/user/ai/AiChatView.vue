@@ -158,14 +158,15 @@ import { ElMessage } from 'element-plus'
 import { Expand, Promotion, CirclePlus, Document, FolderOpened, CircleClose, Search } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { getMyArticles } from '@/api/article.js'
-import { getUploadUrl } from '@/api/file.js'
+import { uploadRagFile, submitRagArticles } from '@/api/ai.js'
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
   streaming: { type: Boolean, default: false },
   streamContent: { type: String, default: '' },
   title: { type: String, default: '' },
-  agent: { type: String, default: 'general' }
+  agent: { type: String, default: 'general' },
+  selectedKbIds: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['toggle-sidebar', 'send', 'update:streaming', 'update:streamContent'])
@@ -238,6 +239,7 @@ function removeAttachment(i) {
 
 async function openArticleSelector() {
   showAttachMenu.value = false
+  if (!getUploadKbId()) return
   articleLoading.value = true
   showArticleDialog.value = true
   try {
@@ -247,26 +249,53 @@ async function openArticleSelector() {
   articleLoading.value = false
 }
 
-function confirmArticles() {
-  const selected = articles.value.filter(a => selectedArticleIds.value.includes(a.id))
-  for (const article of selected) {
-    if (!attachments.value.find(a => a.type === 'article' && a.id === article.id)) {
-      attachments.value.push({ type: 'article', id: article.id, name: article.title })
+async function confirmArticles() {
+  const kbId = getUploadKbId()
+  if (!kbId || !selectedArticleIds.value.length) return
+
+  try {
+    const res = await submitRagArticles(selectedArticleIds.value, kbId)
+    const data = res.data
+    if (res.code !== 200) throw new Error(res.msg)
+    const count = Array.isArray(data) ? data.length : selectedArticleIds.value.length
+    ElMessage.success(`${count} 篇文章已加入知识库`)
+
+    const selected = articles.value.filter(a => selectedArticleIds.value.includes(a.id))
+    for (const article of selected) {
+      if (!attachments.value.find(a => a.type === 'article' && a.id === article.id)) {
+        attachments.value.push({ type: 'article', id: article.id, name: article.title })
+      }
     }
+  } catch {
+    ElMessage.error('提交失败，请重试')
   }
+
   selectedArticleIds.value = []
   articleSearch.value = ''
   showArticleDialog.value = false
 }
 
+function getUploadKbId() {
+  if (!props.selectedKbIds?.length) {
+    ElMessage.warning('请先在左侧选择知识库')
+    return null
+  }
+  return props.selectedKbIds[0]
+}
+
 function openFilePicker() {
   showAttachMenu.value = false
+  const kbId = getUploadKbId()
+  if (!kbId) return
   fileInputRef.value?.click()
 }
 
 async function handleFileChange(e) {
   const file = e.target.files?.[0]
   if (!file) return
+
+  const kbId = getUploadKbId()
+  if (!kbId) { e.target.value = ''; return }
 
   const allowed = [
     'application/pdf',
@@ -281,23 +310,14 @@ async function handleFileChange(e) {
   }
 
   try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    const userId = user.id || 0
-    const objectKey = `rag/${userId}_${Date.now()}_${file.name}`
-
-    const urlRes = await getUploadUrl({ objectKey, contentType: file.type })
-    const uploadUrl = urlRes.data.uploadUrl
-
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: { 'Content-Type': file.type }
-    })
-    if (!uploadRes.ok) throw new Error('Upload failed')
-
-    attachments.value.push({ type: 'file', key: objectKey, name: file.name })
+    const fetchRes = await uploadRagFile(file, kbId)
+    if (!fetchRes.ok) throw new Error('Upload failed')
+    const body = await fetchRes.json()
+    if (body.code !== 200) throw new Error(body.msg || 'Upload failed')
+    ElMessage.success(`"${file.name}" 已加入知识库`)
+    attachments.value.push({ type: 'file', name: file.name, uploaded: true })
   } catch {
-    ElMessage.error('文件上传失败，请重试')
+    ElMessage.error('上传失败，请重试')
   }
 
   e.target.value = ''

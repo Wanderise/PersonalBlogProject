@@ -27,12 +27,11 @@ export function getMessages(conversationId) {
 
 /* ========== 流式对话 ========== */
 
-export function streamChat(conversationId, message, agentId, articleIds, fileKeys, signal) {
+export function streamChat(conversationId, message, agentId, knowledgeBaseIds, signal) {
   const params = new URLSearchParams({ message })
   if (conversationId) params.set('conversationId', conversationId)
   if (agentId) params.set('agentId', agentId)
-  if (articleIds?.length) params.set('articleIds', articleIds.join(','))
-  if (fileKeys?.length) params.set('fileKeys', fileKeys.join(','))
+  if (knowledgeBaseIds?.length) params.set('knowledgeBaseIds', knowledgeBaseIds.join(','))
   return fetch(`${BASE}/ai/chat/stream?${params}`, { headers: headers(), signal })
 }
 
@@ -48,4 +47,45 @@ export function createAgent(data) {
 
 export function deleteAgent(id) {
   return request({ url: `/ai/agents/${id}`, method: 'DELETE' })
+}
+
+/* ========== RAG 知识库 ========== */
+
+export function getKnowledgeBases() {
+  return request({ url: '/ai/knowledge-bases', method: 'GET' })
+}
+
+export function createKnowledgeBase(data) {
+  return request({ url: '/ai/knowledge-bases', method: 'POST', data })
+}
+
+export function deleteKnowledgeBase(id) {
+  return request({ url: `/ai/knowledge-bases/${id}`, method: 'DELETE' })
+}
+
+export function getKnowledgeBaseDocuments(id, params) {
+  return request({ url: `/ai/knowledge-bases/${id}/documents`, method: 'GET', params })
+}
+
+export function deleteKnowledgeBaseDocument(kbId, docId) {
+  return request({ url: `/ai/knowledge-bases/${kbId}/documents/${docId}`, method: 'DELETE' })
+}
+
+export function uploadRagFile(file, knowledgeBaseId) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('knowledgeBaseId', knowledgeBaseId)
+  return fetch(`${BASE}/ai/rag/upload`, {
+    method: 'POST',
+    headers: { Authorization: headers().Authorization },
+    body: form
+  })
+}
+
+export function submitRagArticles(articleIds, knowledgeBaseId) {
+  return request({
+    url: '/ai/rag/articles',
+    method: 'POST',
+    data: { articleIds, knowledgeBaseId }
+  })
 }
