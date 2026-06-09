@@ -110,6 +110,7 @@
         ref="fileInputRef"
         type="file"
         accept=".pdf,.doc,.docx,.txt"
+        multiple
         style="display:none"
         @change="handleFileChange"
       />
@@ -158,7 +159,7 @@ import { ElMessage } from 'element-plus'
 import { Expand, Promotion, CirclePlus, Document, FolderOpened, CircleClose, Search } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { getMyArticles } from '@/api/article.js'
-import { uploadRagFile, submitRagArticles } from '@/api/ai.js'
+import { uploadRagFiles, submitRagArticles } from '@/api/ai.js'
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
@@ -291,8 +292,8 @@ function openFilePicker() {
 }
 
 async function handleFileChange(e) {
-  const file = e.target.files?.[0]
-  if (!file) return
+  const files = [...e.target.files]
+  if (!files.length) return
 
   const kbId = getUploadKbId()
   if (!kbId) { e.target.value = ''; return }
@@ -303,19 +304,22 @@ async function handleFileChange(e) {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'text/plain'
   ]
-  if (!allowed.includes(file.type)) {
-    ElMessage.warning('仅支持 PDF、Word、TXT 文件')
+  const invalid = files.filter(f => !allowed.includes(f.type))
+  if (invalid.length) {
+    ElMessage.warning(`不支持的文件类型：${invalid.map(f => f.name).join('、')}`)
     e.target.value = ''
     return
   }
 
   try {
-    const fetchRes = await uploadRagFile(file, kbId)
+    const fetchRes = await uploadRagFiles(files, kbId)
     if (!fetchRes.ok) throw new Error('Upload failed')
     const body = await fetchRes.json()
     if (body.code !== 200) throw new Error(body.msg || 'Upload failed')
-    ElMessage.success(`"${file.name}" 已加入知识库`)
-    attachments.value.push({ type: 'file', name: file.name, uploaded: true })
+    ElMessage.success(`${files.length} 个文件已加入知识库`)
+    for (const file of files) {
+      attachments.value.push({ type: 'file', name: file.name, uploaded: true })
+    }
   } catch {
     ElMessage.error('上传失败，请重试')
   }

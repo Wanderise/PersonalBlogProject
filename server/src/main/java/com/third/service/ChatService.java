@@ -1,11 +1,7 @@
 package com.third.service;
 
-import com.third.pojo.dto.AIMessage;
-import com.third.pojo.dto.AgentDTO;
-import com.third.pojo.dto.ConversationsDTO;
-import com.third.pojo.vo.AIMessageVO;
-import com.third.pojo.vo.AgentVO;
-import com.third.pojo.vo.ConversationsVO;
+import com.third.pojo.dto.*;
+import com.third.pojo.vo.*;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.stereotype.Service;
 
@@ -33,4 +29,12 @@ public interface ChatService {
     void saveMessage(AIMessage aiMessage);
 
     List<ConversationsVO> getConversations();
+
+    KnowledgeBaseVO addKnowledgeBase(KnowledgeBaseDTO knowledgeBaseDTO);
+
+    List<KnowledgeBaseVO> getKnowledgeBase();
+
+    List<RagFileVO> uploadRagFile(RagFileDTO ragFileDTO);
+
+    List<RagFileVO> uploadRagArticle(RagFileDTO ragFileDTO);
 }

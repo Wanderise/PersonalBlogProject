@@ -71,9 +71,9 @@ export function deleteKnowledgeBaseDocument(kbId, docId) {
   return request({ url: `/ai/knowledge-bases/${kbId}/documents/${docId}`, method: 'DELETE' })
 }
 
-export function uploadRagFile(file, knowledgeBaseId) {
+export function uploadRagFiles(files, knowledgeBaseId) {
   const form = new FormData()
-  form.append('file', file)
+  files.forEach(f => form.append('files', f))
   form.append('knowledgeBaseId', knowledgeBaseId)
   return fetch(`${BASE}/ai/rag/upload`, {
     method: 'POST',

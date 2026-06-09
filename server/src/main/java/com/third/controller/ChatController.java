@@ -4,15 +4,10 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.third.common.result.Result;
-import com.third.pojo.dto.AIMessage;
-import com.third.pojo.dto.AgentDTO;
-import com.third.pojo.dto.ConversationsDTO;
+import com.third.pojo.dto.*;
 import com.third.pojo.entity.Article;
 import com.third.pojo.entity.Conversations;
-import com.third.pojo.vo.AIMessageVO;
-import com.third.pojo.vo.AgentVO;
-import com.third.pojo.vo.ArticleVO;
-import com.third.pojo.vo.ConversationsVO;
+import com.third.pojo.vo.*;
 import com.third.service.ArticleService;
 import com.third.service.ChatService;
 import com.third.service.FileService;
@@ -24,6 +19,7 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
@@ -137,7 +133,7 @@ public class ChatController {
 
 
     @GetMapping(value = "/chat/stream", produces = "text/html;charset=UTF-8")
-    public Flux<String> generateStream(String message, Integer conversationId, Integer agentId, String articleIds, String fileKeys ) {
+    public Flux<String> generateStream(String message, Integer conversationId, Integer agentId) {
         List<AgentVO> agentList = chatService.getAgents();
 //        获取agent提示词
         String prompt = "你是一个有帮助的AI助手";
@@ -146,14 +142,6 @@ public class ChatController {
                 continue;
             prompt = agentVO.getSystemPrompt();
         }
-
-//        获取文章
-        List<ArticleVO> articles = new ArrayList<>();
-        JSON.parseArray(articleIds).forEach(articleId -> {articles.add(articleService.getArticleById((Integer) articleId));});
-
-        List<String> fileKeyList = new ArrayList<>();
-        JSON.parseArray(fileKeys).forEach(key -> {fileKeyList.add(key.toString());});
-
 
 
         List<Message> messages = chatService.getConversationMessages(conversationId);
@@ -168,5 +156,39 @@ public class ChatController {
             aiMessage.setGmtCreate(LocalDateTime.now());
             chatService.saveMessage(aiMessage);
         });
+    }
+
+    @PostMapping("/knowledge-bases")
+    public Result<KnowledgeBaseVO> addKnowledgeBase(@RequestBody KnowledgeBaseDTO knowledgeBaseDTO) {
+        log.info("addKnowledgeBase: {}", knowledgeBaseDTO);
+        KnowledgeBaseVO knowledgeBaseVO = chatService.addKnowledgeBase(knowledgeBaseDTO);
+        return Result.success(knowledgeBaseVO);
+    }
+
+    @GetMapping("/knowledge-bases")
+    public Result<List<KnowledgeBaseVO>> getKnowledgeBases() {
+        List<KnowledgeBaseVO> knowledgeBasesVO = chatService.getKnowledgeBase();
+        return Result.success(knowledgeBasesVO);
+    }
+
+    // TODO: 删除知识库和其连带的东西
+    @DeleteMapping("/knowledge-base/{id}")
+    public Result deleteKnowledgeBase(@PathVariable Integer id) {
+        return  Result.success();
+    }
+
+    @PostMapping("/rag/upload")
+    public Result<List<RagFileVO>> uploadRagFile(@RequestBody RagFileDTO ragFileDTO) {
+        log.info("uploadRagFile: {}", ragFileDTO);
+        List<RagFileVO> ragFileVOList = chatService.uploadRagFile(ragFileDTO);
+        return Result.success(ragFileVOList);
+
+    }
+
+    @PostMapping("/rag/articles")
+    public Result<List<RagFileVO>>  uploadRagArticles(@RequestBody RagFileDTO ragFileDTO) {
+        log.info("uploadRagArticles: {}", ragFileDTO);
+        List<RagFileVO> ragFileVOList = chatService.uploadRagArticle(ragFileDTO);
+        return Result.success(ragFileVOList);
     }
 }

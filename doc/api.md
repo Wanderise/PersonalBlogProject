@@ -960,23 +960,26 @@ Content-Type: multipart/form-data
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| file | File | 是 | PDF/Word/TXT 文件 |
+| files | List\<MultipartFile\> | 是 | 一个或多个 PDF/Word/TXT 文件 |
 | knowledgeBaseId | Integer | 是 | 目标知识库 ID |
-| title | String | 否 | 文档标题，不传则用文件名 |
 
-**成功响应:**
+**成功响应（JSON 数组）:**
 
 ```json
 {
   "code": 200, "msg": null,
-  "data": {
-    "id": 1,
-    "title": "Spring Boot 实战.pdf",
-    "fileType": "PDF",
-    "r2Key": "knowledge/1_1684512000000_Spring Boot 实战.pdf",
-    "status": "READY",
-    "gmtCreate": "2026-06-05T16:00:00"
-  }
+  "data": [
+    {
+      "id": 1, "title": "Spring Boot 实战.pdf",
+      "fileType": "PDF", "r2Key": "knowledge/1_xxx.pdf",
+      "status": "READY", "gmtCreate": "2026-06-05T16:00:00"
+    },
+    {
+      "id": 2, "title": "Java基础.docx",
+      "fileType": "WORD", "r2Key": "knowledge/2_xxx.docx",
+      "status": "READY", "gmtCreate": "2026-06-05T16:00:05"
+    }
+  ]
 }
 ```
 
@@ -1052,7 +1055,7 @@ POST /ai/knowledge-bases
 ```json
 {
   "code": 200, "msg": null,
-  "data": { "id": 1, "name": "我的知识库", "description": "...", "docCount": 0, "gmtCreate": "..." }
+  "data": { "id": 1, "name": "我的知识库", "description": "...", "gmtCreate": "..." }
 }
 ```
 
@@ -1166,11 +1169,40 @@ DELETE /ai/knowledge-bases/{id}/documents/{docId}
 | status | VARCHAR(16) | `PROCESSING` 处理中 / `READY` 就绪 / `ERROR` 失败 |
 | gmt_create | DATETIME | |
 
+### 5.7 向量存储元数据
+
+分块后的每一段文本对应一条向量记录，需携带以下元数据：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| document_id | BIGINT | 关联 knowledge_document.id，删除文档时据此批量删向量 |
+| kb_id | BIGINT | 关联 knowledge_base.id，检索时过滤知识库范围 |
+| version | DOUBLE | 文档版本号，与 knowledge_document 的版本对应 |
+
+> **存储形式示例:**
+> ```json
+> {
+>   "id": "<uuid>",
+>   "vector": [0.012, -0.034, ...],
+>   "payload": { "document_id": 1, "kb_id": 1, "version": 1.0 }
+> }
+> ```
+
 > **Embedding:** 阿里 DashScope `text-embedding-v2`（1536 维），Cosine 距离
 
 ---
 
-### 5.7 聊天集成流程
+### 5.8 聊天集成流程
+
+```
+用户发送消息
+    → ChatController 接收 knowledgeBaseIds
+    → 校验 knowledgeBaseIds 对应的 knowledge_base.user_id == 当前用户
+    → 对 message 做 DashScope Embedding
+    → 在向量库中检索（filter: kb_id IN knowledgeBaseIds, Top-K by Cosine）
+    → 根据命中向量的 document_id 回查 knowledge_document 获取原文，拼入上下文
+    → 调用 DeepSeek 流式生成
+```
 
 ```
 用户发送消息
