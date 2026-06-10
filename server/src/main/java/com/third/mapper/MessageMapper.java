@@ -1,7 +1,7 @@
 package com.third.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.third.pojo.dto.AIMessage;
+import com.third.pojo.entity.AIMessage;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper

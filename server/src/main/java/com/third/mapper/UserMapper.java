@@ -5,6 +5,7 @@ import com.third.pojo.entity.User;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
@@ -22,7 +23,7 @@ public interface UserMapper {
     User getUserInfoByName(String userName);
 
     @Update("update blog.user SET name = #{name}, gmt_modified = #{now} where name = #{userName}")
-    void updateUserName(String userName, String name, LocalDateTime now);
+    void updateUserName(@Param("userName") String userName, @Param("name") String name, @Param("now") LocalDateTime now);
 
     @Select("select id, name, gmt_create, gmt_modified, password, image, level from blog.user where id = #{userId}")
     User getUserInfoById(Integer userId);

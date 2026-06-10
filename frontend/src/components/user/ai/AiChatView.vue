@@ -52,12 +52,18 @@
     </div>
 
     <div class="chat-input-area">
-      <div class="attach-chips" v-if="attachments.length">
-        <div v-for="(att, i) in attachments" :key="i" class="attach-chip">
+      <div class="attach-chips" v-if="attachments.length || pendingFiles.length">
+        <div v-for="(att, i) in attachments" :key="'att-'+i" class="attach-chip">
           <el-icon v-if="att.type === 'article'"><Document /></el-icon>
           <el-icon v-else><FolderOpened /></el-icon>
           <span class="chip-name">{{ att.name }}</span>
           <el-icon class="chip-remove" @click="removeAttachment(i)"><CircleClose /></el-icon>
+        </div>
+        <div v-for="(file, i) in pendingFiles" :key="'pf-'+i" class="attach-chip pending">
+          <el-icon><FolderOpened /></el-icon>
+          <span class="chip-name">{{ file.name }}</span>
+          <span class="pending-badge">待发送</span>
+          <el-icon class="chip-remove" @click="removePendingFile(i)"><CircleClose /></el-icon>
         </div>
       </div>
       <div class="input-wrapper">
@@ -99,9 +105,10 @@
           circle
           size="small"
           :disabled="!canSend || streaming"
+          :loading="uploading"
           @click="send"
         >
-          <el-icon><Promotion /></el-icon>
+          <el-icon v-if="!uploading"><Promotion /></el-icon>
         </el-button>
       </div>
       <p class="input-hint">AI 回答可能存在错误，请注意甄别。可附带文章/文件作为上下文</p>
@@ -179,15 +186,17 @@ const scrollAnchor = ref(null)
 const fileInputRef = ref(null)
 
 const attachments = ref([])
+const pendingFiles = ref([]) // 待发送文件，发送时才上传
 const showAttachMenu = ref(false)
 const showArticleDialog = ref(false)
 const articleSearch = ref('')
 const articleLoading = ref(false)
 const selectedArticleIds = ref([])
 const articles = ref([])
+const uploading = ref(false)
 
 const canSend = computed(() => {
-  return (inputText.value.trim() || attachments.value.length) && !props.streaming
+  return (inputText.value.trim() || attachments.value.length || pendingFiles.value.length) && !props.streaming && !uploading.value
 })
 
 const agentGreeting = computed(() => {
@@ -219,12 +228,38 @@ function scrollBottom() {
   })
 }
 
-function handleEnter() {
+async function handleEnter() {
   if (!canSend.value) return
   const text = inputText.value.trim()
+
+  // 发送时先上传待发送文件（有KB则索引，无KB仅上传到R2显示在附件中）
+  if (pendingFiles.value.length) {
+    uploading.value = true
+    const kbId = props.selectedKbIds?.length ? props.selectedKbIds[0] : null
+    try {
+      if (kbId) {
+        const fetchRes = await uploadRagFiles(pendingFiles.value, kbId)
+        if (!fetchRes.ok) throw new Error('Upload failed')
+        const body = await fetchRes.json()
+        if (body.code !== 200) throw new Error(body.msg || 'Upload failed')
+      }
+      for (const file of pendingFiles.value) {
+        attachments.value.push({ type: 'file', name: file.name })
+      }
+    } catch {
+      ElMessage.error('文件上传失败')
+    }
+    pendingFiles.value = []
+    uploading.value = false
+  }
+
+  // 允许只发文件不发文本
+  if (!text && !attachments.value.length) return
+
   emit('send', { text, attachments: [...attachments.value] })
   inputText.value = ''
   attachments.value = []
+  pendingFiles.value = []
   nextTick(() => {
     if (inputRef.value) { inputRef.value.style.height = 'auto' }
   })
@@ -236,6 +271,10 @@ function send() {
 
 function removeAttachment(i) {
   attachments.value.splice(i, 1)
+}
+
+function removePendingFile(i) {
+  pendingFiles.value.splice(i, 1)
 }
 
 async function openArticleSelector() {
@@ -286,17 +325,12 @@ function getUploadKbId() {
 
 function openFilePicker() {
   showAttachMenu.value = false
-  const kbId = getUploadKbId()
-  if (!kbId) return
   fileInputRef.value?.click()
 }
 
-async function handleFileChange(e) {
+function handleFileChange(e) {
   const files = [...e.target.files]
   if (!files.length) return
-
-  const kbId = getUploadKbId()
-  if (!kbId) { e.target.value = ''; return }
 
   const allowed = [
     'application/pdf',
@@ -311,19 +345,10 @@ async function handleFileChange(e) {
     return
   }
 
-  try {
-    const fetchRes = await uploadRagFiles(files, kbId)
-    if (!fetchRes.ok) throw new Error('Upload failed')
-    const body = await fetchRes.json()
-    if (body.code !== 200) throw new Error(body.msg || 'Upload failed')
-    ElMessage.success(`${files.length} 个文件已加入知识库`)
-    for (const file of files) {
-      attachments.value.push({ type: 'file', name: file.name, uploaded: true })
-    }
-  } catch {
-    ElMessage.error('上传失败，请重试')
+  // 文件先暂存，发送消息时才上传
+  for (const file of files) {
+    pendingFiles.value.push(file)
   }
-
   e.target.value = ''
 }
 
@@ -625,6 +650,20 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 }
 
 .chip-remove:hover { opacity: 1; color: #ef4444; }
+
+.attach-chip.pending {
+  background: #fff3cd;
+  color: #856404;
+  border-color: rgba(133, 100, 4, 0.2);
+}
+
+.pending-badge {
+  font-size: 10px;
+  background: #856404;
+  color: #fff;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
 
 /* ========== 消息内附件标签 ========== */
 

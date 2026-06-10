@@ -12,6 +12,6 @@ public class ArticleVersionVO {
     private String title;
     private String content;
     private String tag;
-    private LocalDate createTime;
+    private LocalDate gmtCreate;
 
 }

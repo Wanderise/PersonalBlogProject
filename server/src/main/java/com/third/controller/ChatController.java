@@ -1,31 +1,26 @@
 package com.third.controller;
 
-import com.alibaba.fastjson.JSON;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.third.common.result.Result;
 import com.third.pojo.dto.*;
-import com.third.pojo.entity.Article;
+import com.third.pojo.entity.AIMessage;
 import com.third.pojo.entity.Conversations;
 import com.third.pojo.vo.*;
-import com.third.service.ArticleService;
 import com.third.service.ChatService;
-import com.third.service.FileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.deepseek.DeepSeekChatModel;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @RequestMapping("/ai")
@@ -43,29 +38,7 @@ public class ChatController {
     private ChatService chatService;
 
     @Autowired
-    private ArticleService articleService;
-
-    @Autowired
-    private FileService fileService;
-
-    @Autowired
     private ChatClient chatClient;
-
-    @Autowired
-    private EmbeddingModel embeddingModel;
-
-    @Autowired
-    private VectorStore vectorStore;
-
-    public void save(String content, Integer conversationId){
-        AIMessage aiMessage = new AIMessage();
-        aiMessage.setRole("user");
-        aiMessage.setContent(content);
-        aiMessage.setConversationId(conversationId);
-        aiMessage.setGmtCreate(LocalDateTime.now());
-        log.info("aiMessage={}", aiMessage);
-        chatService.saveMessage(aiMessage);
-    }
 
     @PostMapping("/agents")
     public Result<AgentVO> addAgent(@RequestBody AgentDTO agentDTO) {
@@ -126,36 +99,32 @@ public class ChatController {
 
 
     @GetMapping("/generate")
-    public Map generate(@RequestParam(value = "message", defaultValue = "Tell me a joke") String message) {
-        return Map.of("generation", chatModel.call(message));
+    public Result<Map<String, String>> generate(@RequestParam(value = "message", defaultValue = "Tell me a joke") String message) {
+        return Result.success(Map.of("generation", chatModel.call(message)));
     }
 
 
 
-    @GetMapping(value = "/chat/stream", produces = "text/html;charset=UTF-8")
-    public Flux<String> generateStream(String message, Integer conversationId, Integer agentId) {
-        List<AgentVO> agentList = chatService.getAgents();
-//        获取agent提示词
-        String prompt = "你是一个有帮助的AI助手";
-        for (AgentVO agentVO : agentList) {
-            if (agentVO.getId().equals(agentId))
-                continue;
-            prompt = agentVO.getSystemPrompt();
-        }
-
-
+    @GetMapping(value = "/chat/stream", produces = MediaType.TEXT_PLAIN_VALUE)
+    public Flux<String> generateStream(@RequestParam String message,
+                                       @RequestParam(required = false) Integer conversationId,
+                                       @RequestParam(required = false) Integer agentId) {
+        String prompt = chatService.resolveSystemPrompt(agentId);
         List<Message> messages = chatService.getConversationMessages(conversationId);
         log.info("getConversationMessages: {}", messages);
-        save(message, conversationId);
-        StringBuilder stringBuilder = new StringBuilder();
-        return chatClient.prompt(prompt).user(message).messages(messages).stream().content().doOnNext(stringBuilder::append).doOnComplete(() ->{
-            AIMessage aiMessage = new AIMessage();
-            aiMessage.setRole("assistant");
-            aiMessage.setContent(stringBuilder.toString());
-            aiMessage.setConversationId(conversationId);
-            aiMessage.setGmtCreate(LocalDateTime.now());
-            chatService.saveMessage(aiMessage);
-        });
+        chatService.saveUserMessage(message, conversationId);
+        AtomicReference<String> fullResponse = new AtomicReference<>("");
+        return chatClient.prompt(prompt).user(message).messages(messages).stream().content()
+                .doOnNext(chunk -> fullResponse.updateAndGet(s -> s + chunk))
+                .doOnError(e -> log.error("流式聊天出错: {}", e.getMessage(), e))
+                .doOnComplete(() -> {
+                    AIMessage aiMessage = new AIMessage();
+                    aiMessage.setRole("assistant");
+                    aiMessage.setContent(fullResponse.get());
+                    aiMessage.setConversationId(conversationId);
+                    aiMessage.setGmtCreate(LocalDateTime.now());
+                    chatService.saveMessage(aiMessage);
+                });
     }
 
     @PostMapping("/knowledge-bases")
@@ -172,13 +141,18 @@ public class ChatController {
     }
 
     // TODO: 删除知识库和其连带的东西
-    @DeleteMapping("/knowledge-base/{id}")
+    @DeleteMapping({"/knowledge-bases/{id}", "/knowledge-base/{id}"})
     public Result deleteKnowledgeBase(@PathVariable Integer id) {
+        chatService.deleteKnowledgeBase(id);
         return  Result.success();
     }
 
-    @PostMapping("/rag/upload")
-    public Result<List<RagFileVO>> uploadRagFile(@RequestBody RagFileDTO ragFileDTO) {
+    @PostMapping(value = "/rag/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<List<RagFileVO>> uploadRagFile(@RequestParam("files") List<MultipartFile> files,
+                                                 @RequestParam("knowledgeBaseId") Integer knowledgeBaseId) {
+        RagFileDTO ragFileDTO = new RagFileDTO();
+        ragFileDTO.setFiles(files);
+        ragFileDTO.setKnowledgeBaseId(knowledgeBaseId);
         log.info("uploadRagFile: {}", ragFileDTO);
         List<RagFileVO> ragFileVOList = chatService.uploadRagFile(ragFileDTO);
         return Result.success(ragFileVOList);

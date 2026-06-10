@@ -26,6 +26,7 @@ public class WordDocumentReader implements FileDocumentReader {
 
     @Override
     public boolean support(String type) {
-        return "docx".equals(type);
+        return type != null && (type.contains("officedocument.wordprocessingml.document")
+                || type.equals("docx"));
     }
 }

@@ -9,3 +9,5 @@ spring:
 r2:
   access-key: Cloudflare R2 Access Key
   secret-key: Cloudflare R2 Secret Key
+jwt:
+  secret: 至少 32 字节的 JWT HS256 密钥

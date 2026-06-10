@@ -4,7 +4,7 @@ import lombok.Data;
 
 @Data
 public class AgentDTO {
-    String name;
-    String systemPrompt;
-    String icon;
+    private String name;
+    private String systemPrompt;
+    private String icon;
 }

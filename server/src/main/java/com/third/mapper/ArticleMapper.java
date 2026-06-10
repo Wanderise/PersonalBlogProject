@@ -19,10 +19,10 @@ import java.util.List;
 public interface ArticleMapper extends BaseMapper<Article> {
 
 
-    @Insert("insert into blog.article(writer_id, gmt_create, gmt_modified, content, title, image) "+
-            "values (#{writerId}, #{gmtCreate}, #{gmtModified}, #{content}, #{title}, #{image})")
+    @Insert("insert into blog.article(writer_id, gmt_create, gmt_modified, content, title, image, version) "+
+            "values (#{writerId}, #{gmtCreate}, #{gmtModified}, #{content}, #{title}, #{image}, #{version})")
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
-    void addArticle(Article articleEntity);
+    int addArticle(Article articleEntity);
 
     @Insert("insert ignore into blog.article_tag(article_id, tag_id) VALUES (#{articleId}, #{tagId})")
     void addArticleTag(Integer articleId, Integer tagId);
@@ -30,7 +30,7 @@ public interface ArticleMapper extends BaseMapper<Article> {
     @Select("select t.name from blog.tag t inner join blog.article_tag at on t.id = at.tag_id where at.article_id = #{articleId}")
     List<String> getTagsByArticleId(Integer articleId);
 
-    @Select("select *, blog.user.name AS writerName from blog.article INNER JOIN blog.user ON blog.article.writer_id = blog.user.id where blog.article.id = #{id}")
+    @Select("select a.id, a.writer_id AS writerId, a.gmt_create AS gmtCreate, a.gmt_modified AS gmtModified, a.content, a.title, a.image, a.version, u.name AS writerName from blog.article a INNER JOIN blog.user u ON a.writer_id = u.id where a.id = #{id}")
     Article getArticleById(Integer id);
 
     List<Article> getArticleList(String tag, String keyword);

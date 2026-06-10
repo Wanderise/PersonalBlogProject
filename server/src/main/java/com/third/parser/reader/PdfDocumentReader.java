@@ -19,7 +19,7 @@ public class PdfDocumentReader implements FileDocumentReader {
 
     @Override
     public boolean support(String type) {
-        return "pdf".equals(type);
+        return type != null && (type.equals("application/pdf") || type.equals("pdf"));
     }
 
     @Override

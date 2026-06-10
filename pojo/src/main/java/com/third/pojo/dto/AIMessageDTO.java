@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Data
 @TableName("ai_message")
-public class AIMessage {
+public class AIMessageDTO {
     @TableId(value = "id", type = IdType.AUTO)
     private Integer id;
     private Integer conversationId;

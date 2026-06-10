@@ -16,8 +16,8 @@ import com.third.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -32,12 +32,15 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private FileService fileService;
 
+    private static final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+
     @Override
     public void register(UserDTO user) {
         User u = new User();
         BeanUtils.copyProperties(user,u);
+        // BCrypt内置随机盐，比MD5安全，不可逆
         String password = user.getPassword();
-        password = DigestUtils.md5DigestAsHex(password.getBytes());
+        password = encoder.encode(password);
         u.setPassword(password);
         u.setGmtCreate(LocalDateTime.now());
         u.setGmtModified(LocalDateTime.now());
@@ -53,8 +56,8 @@ public class UserServiceImpl implements UserService {
             throw new UserCountNotExist(RespondCode.NOT_FOUND);
         }
         String password = userDTO.getPassword();
-        password = DigestUtils.md5DigestAsHex(password.getBytes());
-        if (!user.getPassword().equals(password)) {
+        // BCrypt密文不可逆比较，必须用matches而非equals
+        if (!encoder.matches(password, user.getPassword())) {
             throw new WrongPassword(RespondCode.NOT_FOUND);
         }
         UserVO userVO = new UserVO();
@@ -85,7 +88,7 @@ public class UserServiceImpl implements UserService {
         String userName = UserContext.getUserName();
         String name = userDTO.getName();
         User user = userMapper.getUserInfoByName(name);
-        if (user != null && name.equals(userName)) {
+        if (user != null && !name.equals(userName)) {
             throw new UserNameHasExist(RespondCode.NAME_EXIST);
         }
         LocalDateTime now = LocalDateTime.now();
@@ -102,11 +105,11 @@ public class UserServiceImpl implements UserService {
         String userName = UserContext.getUserName();
         User user = userMapper.getUserInfoByName(userName);
         String oldKey = user.getImage();
-        if (oldKey != null && !oldKey.equals("")) {
-            fileService.deleteObject(oldKey);
-        }
+        // 先更新DB再删S3旧头像，防止DB失败导致S3文件已丢失
         user.setImage(userDTO.getObjectKey());
         userMapper.updateUserAvatar(user);
-
+        if (oldKey != null && !oldKey.isEmpty()) {
+            fileService.deleteObject(oldKey);
+        }
     }
 }

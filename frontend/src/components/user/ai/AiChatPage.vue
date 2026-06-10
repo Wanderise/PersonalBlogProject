@@ -122,7 +122,7 @@ async function handleSelect(id) {
   try {
     const res = await getMessages(id)
     messages.value = (res.data || []).map(m => ({
-      role: m.role === 'USER' ? 'user' : 'assistant',
+      role: m.role === 'user' ? 'user' : 'assistant',
       content: m.content
     }))
   } catch { /* ignore */ }

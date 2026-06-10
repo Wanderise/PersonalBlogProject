@@ -25,12 +25,13 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import software.amazon.awssdk.services.s3.endpoints.internal.Substring;
+import java.math.BigDecimal;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -55,25 +56,59 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     FileService fileService;
 
     private ArticleVO articleToVO(Article article) {
+        return articleToVO(article, true);
+    }
+
+    /**
+     * 文章转VO，generateUrls=false时列表视图跳过S3预签名URL生成
+     */
+    private ArticleVO articleToVO(Article article, boolean generateUrls) {
+        if (article == null) {
+            throw new NoSuchArticle(RespondCode.NOT_FOUND);
+        }
         ArticleVO articleVO = new ArticleVO();
         BeanUtils.copyProperties(article, articleVO);
         articleVO.setTag(articleMapper.getTagsByArticleId(article.getId()));
         if (article.getImage() != null && !article.getImage().isEmpty()) {
+            // image列存JSON数组字符串，如["key1","key2"]
             List<String> images = JSON.parseArray(article.getImage(), String.class);
-            List<String> imageUrls = new ArrayList<>();
-            for (String image : images) {
-                imageUrls.add(fileService.getDownloadPresignedUrl(image));
-            }
-            articleVO.setImageUrls(imageUrls);
             articleVO.setImage(images);
+            // 列表模式也生成第一张图的URL作为封面
+            if (generateUrls) {
+                List<String> imageUrls = new ArrayList<>();
+                for (String image : images) {
+                    imageUrls.add(fileService.getDownloadPresignedUrl(image));
+                }
+                articleVO.setImageUrls(imageUrls);
+            } else if (!images.isEmpty()) {
+                List<String> coverOnly = new ArrayList<>();
+                coverOnly.add(fileService.getDownloadPresignedUrl(images.get(0)));
+                articleVO.setImageUrls(coverOnly);
+            }
         }
-        String summary = article.getContent().length() >= 200 ? article.getContent().substring(0, 201) : article.getContent();
+        String content = article.getContent() == null ? "" : article.getContent();
+        String summary = content.length() > 200 ? content.substring(0, 200) : content;
         articleVO.setSummary(summary);
         return articleVO;
     }
-//    添加关联表和Tag表
+
+    private ArticleListVO buildArticleListVO(PageInfo<Article> pageInfo) {
+        ArticleListVO vo = new ArticleListVO();
+        vo.setPage(pageInfo.getPageNum());
+        vo.setTotal((int) pageInfo.getTotal());
+        vo.setSize(pageInfo.getPageSize());
+        vo.setArticles(pageInfo.getList().stream().map(a -> articleToVO(a, false)).collect(Collectors.toList()));
+        return vo;
+    }
+//    保证Tag表存在对应标签后建立文章-标签关联
     private void simpleAddTags(Integer ArticleId, List<String> tags){
+        if (tags == null) {
+            return;
+        }
         for (String tag : tags.stream().distinct().toList()) {
+            if (tag == null || tag.isBlank()) {
+                continue;
+            }
             Tag tagByName = articleMapper.getTagByName(tag);
             if (tagByName == null) {
                 tagByName = new Tag();
@@ -87,11 +122,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     private void simpleDeleteTags(Integer ArticleId, List<String> tags){
         articleMapper.deleteArticleTagById(ArticleId);
+        if (tags == null) {
+            return;
+        }
 
         for (String tag : tags) {
             Tag tagByName = articleMapper.getTagByName(tag);
+            if (tagByName == null) {
+                continue;
+            }
             Integer tagId = tagByName.getId();
             int articleCount = articleMapper.getArticleCountByTagId(tagId);
+            // 只删除未被其他文章引用的标签，防止误删共享标签
             if(articleCount == 0) {
                 articleMapper.deleteTagById(tagId);
             }
@@ -116,13 +158,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public ArticleVO addArticle(ArticleAddDTO articleDTO) {
         Article article = new Article();
         BeanUtils.copyProperties(articleDTO, article);
+        if (article.getVersion() == null) {
+            article.setVersion(1.0);
+        }
         article.setImage(JSON.toJSONString(articleDTO.getImage()));
         article.setGmtCreate(LocalDateTime.now());
         article.setGmtModified(LocalDateTime.now());
+        // writerId由服务端从JWT中获取，防止客户端伪造作者
         Integer userId = UserContext.getUserId();
         article.setWriterId(userId);
         log.info("article:{}", article);
-
 
         articleMapper.addArticle(article);
         Integer articleId = article.getId();
@@ -144,42 +189,35 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Override
     public ArticleListVO getArticleList(int page, int size, String tag, String keyword) {
-        ArticleListVO articleListVO = new ArticleListVO();
         PageHelper.startPage(page, size);
-        List<Article> Articles = articleMapper.getArticleList(tag, keyword);
-        PageInfo<Article> pageInfo = new PageInfo<>(Articles);
-        log.info("Articles:{}", Articles);
-        articleListVO.setPage(pageInfo.getPageNum());
-        articleListVO.setTotal(pageInfo.getPages());
-        articleListVO.setSize(pageInfo.getSize());
-        List<ArticleVO> articleVOList = new ArrayList<>();
-        for (Article article : Articles) {
-            ArticleVO articleVO = articleToVO(article);
-            articleVOList.add(articleVO);
-        }
-        articleListVO.setArticles(articleVOList);
-        log.info("articleListVO:{}", articleListVO);
-        return articleListVO;
-
-
+        List<Article> articles = articleMapper.getArticleList(tag, keyword);
+        PageInfo<Article> pageInfo = new PageInfo<>(articles);
+        log.info("Articles:{}", articles);
+        ArticleListVO result = buildArticleListVO(pageInfo);
+        log.info("articleListVO:{}", result);
+        return result;
     }
 
     @Override
     @Transactional
     public void deleteArticle(Integer id) {
         Integer userId = UserContext.getUserId();
-        ArticleVO article = getArticleById(id);
-        if (userId != article.getWriterId()) {
+        // 用baseMapper轻量查询，避免articleToVO生成S3预签名URL
+        Article article = baseMapper.selectById(id);
+        if (article == null) {
+            throw new NoSuchArticle(RespondCode.NOT_FOUND);
+        }
+        if (!Objects.equals(userId, article.getWriterId())) {
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         }
         articleMapper.deleteArticleById(id);
-        List<String> tags = article.getTag();
+        List<String> tags = articleMapper.getTagsByArticleId(id);
         simpleDeleteTags(id, tags);
 
-        if(article.getImage() != null) {
-            List<String> imageUrls = article.getImage();
-            for (String imageUrl : imageUrls) {
-                fileService.deleteObject(imageUrl);
+        if (article.getImage() != null && !article.getImage().isEmpty()) {
+            List<String> imageKeys = JSON.parseArray(article.getImage(), String.class);
+            for (String imageKey : imageKeys) {
+                fileService.deleteObject(imageKey);
             }
         }
 
@@ -193,21 +231,27 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public void updateArticleById(Integer id, ArticleAddDTO articleAddDTO) {
         Integer userId = UserContext.getUserId();
         Article article = articleMapper.getArticleById(id);
+        if (article == null) {
+            throw new NoSuchArticle(RespondCode.NOT_FOUND);
+        }
         if (!userId.equals(article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
-        // 先归档当前版本
+        // 更新前将当前版本归档到article_version表，支持回滚
         List<String> oldTags = articleMapper.getTagsByArticleId(article.getId());
         simpleAddVersion(article, oldTags);
         // 更新 article 字段
+        Double oldVersion = article.getVersion() == null ? 1.0 : article.getVersion();
         BeanUtils.copyProperties(articleAddDTO, article);
         if (articleAddDTO.getVersion() == null)
-            article.setVersion(article.getVersion() + 0.1d);
+            // BigDecimal避免浮点累加精度误差（如1.2000000000000002）
+            article.setVersion(BigDecimal.valueOf(oldVersion).add(new BigDecimal("0.1")).doubleValue());
         article.setImage(JSON.toJSONString(articleAddDTO.getImage()));
         article.setGmtModified(LocalDateTime.now());
         log.info("updating_article:{}", article);
         articleMapper.updateArticle(article);
         articleMapper.deleteArticleTagById(id);
         List<String> tags = articleAddDTO.getTag();
+        simpleDeleteTags(id, oldTags);
         simpleAddTags(id, tags);
 
     }
@@ -219,25 +263,19 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         List<Article> articles = articleMapper.getMyArticleList(userId);
         PageInfo<Article> pageInfo = new PageInfo<>(articles);
         log.info("articles:{}", articles);
-        ArticleListVO articleListVO = new ArticleListVO();
-        articleListVO.setPage(pageInfo.getPageNum());
-        articleListVO.setTotal(pageInfo.getPages());
-        articleListVO.setSize(pageInfo.getPages());
-        List<ArticleVO> articleVOList = new ArrayList<>();
-        for (Article article : articles) {
-            ArticleVO articleVO = articleToVO(article);
-            articleVOList.add(articleVO);
-        }
-        articleListVO.setArticles(articleVOList);
-        log.info("articleListVO:{}", articleListVO);
-        return articleListVO;
+        ArticleListVO result = buildArticleListVO(pageInfo);
+        log.info("articleListVO:{}", result);
+        return result;
     }
 
     @Override
     public List<ArticleVersionVO> getVersions(Integer id) {
         Article article = articleMapper.getArticleById(id);
+        if (article == null) {
+            throw new NoSuchArticle(RespondCode.NOT_FOUND);
+        }
         Integer userId = UserContext.getUserId();
-        if (userId != article.getWriterId())
+        if (!Objects.equals(userId, article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         LambdaQueryWrapper<ArticleVersion> lambdaQueryWrapper = new LambdaQueryWrapper<>();
         lambdaQueryWrapper.eq(ArticleVersion::getArticleId, id)
@@ -253,6 +291,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Transactional
     public ArticleVersionVO rollbackVersion(Integer id, Integer versionId) {
         Article article = articleMapper.getArticleById(id);
+        if (article == null) {
+            throw new NoSuchArticle(RespondCode.NOT_FOUND);
+        }
         Integer userId = UserContext.getUserId();
         if (!userId.equals(article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
@@ -265,7 +306,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         article.setGmtModified(LocalDateTime.now());
         articleMapper.updateArticle(article);
         // 重建 tag 关联
+        List<String> oldTags = articleMapper.getTagsByArticleId(id);
         articleMapper.deleteArticleTagById(id);
+        simpleDeleteTags(id, oldTags);
         List<String> rollbackTags = JSON.parseArray(articleVersion.getTag(), String.class);
         simpleAddTags(id, rollbackTags);
         return articleVersion;

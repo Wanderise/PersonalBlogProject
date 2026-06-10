@@ -12,6 +12,7 @@ public class InterceptorConfig implements WebMvcConfigurer {
     @Autowired
     JwtInterceptor jwtInterceptor;
 
+    @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/**")

@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 @TableName("ai_conversation")
@@ -15,6 +15,6 @@ public class Conversations {
     private Integer userId;
     private String title;
     private Integer agentId;
-    private LocalDate gmtCreate;
-    private LocalDate gmtModified;
+    private LocalDateTime gmtCreate;
+    private LocalDateTime gmtModified;
 }

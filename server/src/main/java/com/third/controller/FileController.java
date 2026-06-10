@@ -24,7 +24,7 @@ public class FileController {
     @Autowired
     private FileService fileService;
 
-    @Value("${r2.public-domain}")
+    @Value("${r2.public-domain:#{null}}")
     private String publicDomain;
 
     @PostMapping("upload/url")
@@ -33,9 +33,10 @@ public class FileController {
         String objectKey = uploadRequestDTO.getObjectKey();
         String contentType = uploadRequestDTO.getContentType();
         String uploadPresignedUrl = fileService.getUploadPresignedUrl(objectKey, contentType);
-        log.info("上传url:" + uploadPresignedUrl);
+        log.info("上传url: {}", uploadPresignedUrl);
 
-        String publicUrl = publicDomain.equals("http://example.com") ? null : publicDomain + "/" + objectKey  ;
+        String publicUrl = (publicDomain == null || "http://example.com".equals(publicDomain))
+                ? null : publicDomain.replaceAll("/$", "") + "/" + objectKey;
         Map<String, String> map = new HashMap<>();
         map.put("uploadUrl", uploadPresignedUrl);
         map.put("publicUrl", publicUrl);

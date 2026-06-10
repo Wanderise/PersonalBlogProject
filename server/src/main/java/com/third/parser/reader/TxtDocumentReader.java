@@ -25,6 +25,7 @@ public class TxtDocumentReader implements FileDocumentReader {
 
     @Override
     public boolean support(String type) {
-        return "txt".equalsIgnoreCase(type);
+        return type != null && (type.equals("text/plain") || type.equals("text/plain;charset=UTF-8")
+                || type.equalsIgnoreCase("txt"));
     }
 }

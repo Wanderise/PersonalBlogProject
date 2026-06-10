@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
+import org.apache.ibatis.annotations.Param;
+
 import java.util.List;
 
 @Mapper
@@ -20,5 +22,8 @@ public interface AgentMapper {
 
     @Delete("delete from blog.ai_agent where id = #{id}")
     void deleteAgentById(Integer id);
+
+    @Select("select count(*) from blog.ai_agent where id = #{id} and user_id = #{userId}")
+    Long countOwnership(@Param("id") Integer id, @Param("userId") Integer userId);
 
 }

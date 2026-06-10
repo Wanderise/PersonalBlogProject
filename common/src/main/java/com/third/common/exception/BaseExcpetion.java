@@ -12,4 +12,7 @@ public class BaseExcpetion extends RuntimeException {
         super(message);
         this.code = code.getCode();
     }
+    public Integer getCode() {
+        return code;
+    }
 }

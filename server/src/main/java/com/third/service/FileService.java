@@ -30,6 +30,7 @@ public class FileService {
     @Value("${r2.bucket}")
     private String bucketName;
 
+    // 生成R2/S3预签名上传URL，客户端凭此直传文件，10分钟内有效
     public String getUploadPresignedUrl(String objectKey, String contentType) {
         log.info("getUploadPresignedUrl调用");
         PutObjectRequest objectRequest = PutObjectRequest.builder()
@@ -46,6 +47,7 @@ public class FileService {
         return s3Presigner.presignPutObject(presignRequest).url().toString();
     }
 
+    // 生成预签名下载URL，1小时内有效，前端可直接用此URL展示图片
     public String getDownloadPresignedUrl(String objectKey) {
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(bucketName)

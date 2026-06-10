@@ -16,7 +16,7 @@ public class UserContext {
 
     public static String getUserName() {
         UserVO userVO = userVOThreadLocal.get();
-        return userVO.getName();
+        return userVO != null ? userVO.getName() : null;
     }
 
     public static void clear() {
