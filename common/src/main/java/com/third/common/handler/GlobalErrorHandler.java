@@ -12,6 +12,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 public class GlobalErrorHandler {
 
+    @ExceptionHandler(value = org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<Result> handleUploadSizeExceeded(org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        log.error("文件上传超过大小限制: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(Result.error("文件大小超过限制，单文件最大 50MB，请求最大 100MB"));
+    }
+
     // 业务异常返回其携带的真实HTTP状态码（401/403/404等），而非统一400
     @ExceptionHandler(value = BaseExcpetion.class)
     public ResponseEntity<Result> handleException(BaseExcpetion e) {

@@ -62,11 +62,70 @@
               <span class="kb-name">{{ kb.name }}</span>
               <span class="kb-meta">{{ kb.docCount || 0 }} 篇文档</span>
             </div>
+            <el-icon class="kb-manage" @click.stop="openKbManager(kb)"><Setting /></el-icon>
             <el-icon class="kb-del" @click.stop="removeKb(kb.id)"><Delete /></el-icon>
           </div>
         </div>
         <div v-else class="conv-empty">暂无知识库</div>
       </div>
+
+      <!-- 知识库文档管理弹窗 -->
+      <el-dialog v-model="showKbManager" width="880px" :close-on-click-modal="false" class="kb-manager-dialog">
+        <template #header>
+          <div class="kb-mgr-header">
+            <el-icon :size="18"><FolderOpened /></el-icon>
+            <span>{{ managingKb?.name || '' }}</span>
+            <span class="kb-mgr-count">{{ documents.length }} 篇文档</span>
+          </div>
+        </template>
+        <div class="kb-mgr-body" v-loading="docLoading">
+          <!-- 左侧文档列表 -->
+          <div class="kb-mgr-list">
+            <div v-if="documents.length === 0 && !docLoading" class="doc-empty">暂无文档</div>
+            <div
+              v-for="doc in documents" :key="doc.id"
+              class="doc-item" :class="{ active: activeDoc?.id === doc.id }"
+              @click="selectDoc(doc)"
+            >
+              <div class="doc-icon">
+                <el-icon v-if="doc.fileType === 'pdf'" color="#ef4444"><Document /></el-icon>
+                <el-icon v-else-if="doc.fileType === 'docx' || doc.fileType === 'doc'" color="#3b82f6"><Document /></el-icon>
+                <el-icon v-else-if="doc.fileType === 'txt'" color="#22c55e"><Tickets /></el-icon>
+                <el-icon v-else-if="doc.fileType === 'md'" color="#8b5cf6"><Notebook /></el-icon>
+                <el-icon v-else color="#6b7280"><FolderOpened /></el-icon>
+              </div>
+              <div class="doc-body">
+                <span class="doc-name">{{ doc.title }}</span>
+                <span class="doc-meta">{{ doc.fileType }} · {{ formatTime(doc.gmtCreate) }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- 右侧内容预览 -->
+          <div class="kb-mgr-preview">
+            <div v-if="!activeDoc" class="preview-placeholder">
+              <el-icon :size="40" color="#c4b5fd"><Reading /></el-icon>
+              <p>点击左侧文档查看内容</p>
+            </div>
+            <div v-else-if="previewLoading" class="preview-placeholder">
+              <el-icon :size="24" class="is-loading"><Loading /></el-icon>
+              <p>加载中...</p>
+            </div>
+            <div v-else class="preview-content">
+              <div class="preview-head">
+                <span class="preview-title">{{ activeDoc.title }}</span>
+                <el-button size="small" text @click="openOrigin(activeDoc)">
+                  <el-icon><Link /></el-icon> 打开原文件
+                </el-button>
+              </div>
+              <div class="preview-body">
+                <div v-if="previewError" class="preview-error">{{ previewError }}</div>
+                <pre v-else-if="previewContent" class="preview-text">{{ previewContent }}</pre>
+                <div v-else class="preview-placeholder-inner">(空文档)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-dialog>
 
       <div class="sidebar-section conversations">
         <div class="section-title">对话历史</div>
@@ -152,8 +211,8 @@
 <script setup>
 import { ref, reactive, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, ChatDotRound, ChatLineSquare, EditPen, Delete, Plus } from '@element-plus/icons-vue'
-import { createAgent, deleteAgent, getKnowledgeBases, createKnowledgeBase, deleteKnowledgeBase } from '@/api/ai.js'
+import { ArrowLeft, ChatDotRound, ChatLineSquare, EditPen, Delete, Plus, Setting, Document, Tickets, Notebook, FolderOpened, Reading, Loading, Link } from '@element-plus/icons-vue'
+import { createAgent, deleteAgent, getKnowledgeBases, createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBaseDocuments, deleteKnowledgeBaseDocument } from '@/api/ai.js'
 
 const props = defineProps({
   open: { type: Boolean, default: true },
@@ -262,6 +321,99 @@ async function removeKb(id) {
   try {
     await deleteKnowledgeBase(id)
     ElMessage.success('已删除')
+    emit('refreshKbs')
+  } catch {
+    ElMessage.error('删除失败')
+  }
+}
+
+/* ========== 知识库文档管理 ========== */
+const showKbManager = ref(false)
+const managingKb = ref(null)
+const documents = ref([])
+const docLoading = ref(false)
+const activeDoc = ref(null)
+const previewLoading = ref(false)
+const previewContent = ref('')
+const previewUrl = ref('')
+const previewError = ref('')
+
+async function openKbManager(kb) {
+  managingKb.value = kb
+  activeDoc.value = null
+  previewContent.value = ''
+  previewError.value = ''
+  showKbManager.value = true
+  await loadDocuments(kb.id)
+}
+
+async function loadDocuments(kbId) {
+  docLoading.value = true
+  try {
+    const res = await getKnowledgeBaseDocuments(kbId)
+    documents.value = res.data || []
+  } catch {
+    documents.value = []
+  }
+  docLoading.value = false
+}
+
+const isTextFile = (doc) => doc?.fileType === 'txt' || doc?.fileType === 'md'
+
+async function selectDoc(doc) {
+  activeDoc.value = doc
+  previewLoading.value = true
+  previewError.value = ''
+  previewContent.value = ''
+  previewUrl.value = ''
+  const BASE = 'http://localhost:8080'
+  try {
+    const dlRes = await fetch(`${BASE}/file/download/url?objectKey=${encodeURIComponent(doc.r2Key)}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
+    })
+    const dlBody = await dlRes.json()
+    if (dlBody.code !== 200 || !dlBody.data?.downloadUrl) throw new Error('获取下载链接失败')
+    // 只有文本文件尝试读取内容，PDF/Word等二进制文件只展示信息
+    if (isTextFile(doc)) {
+      try {
+        const fileRes = await fetch(dlBody.data.downloadUrl)
+        if (!fileRes.ok) throw new Error(`HTTP ${fileRes.status}`)
+        const text = await fileRes.text()
+        previewContent.value = text.length > 50000 ? text.substring(0, 50000) + '\n\n... (内容过长已截断)' : text
+      } catch {
+        previewContent.value = '(该文本文件无法在线预览，请点击"打开原文件"查看)'
+      }
+    } else {
+      previewContent.value = '(PDF/Word 文件无法在线预览，请点击下方"打开原文件"在新标签查看)'
+    }
+  } catch (e) {
+    previewError.value = '无法加载文档信息: ' + e.message
+  }
+  previewLoading.value = false
+}
+
+function openOrigin(doc) {
+  if (!doc?.r2Key) return
+  const BASE = 'http://localhost:8080'
+  fetch(`${BASE}/file/download/url?objectKey=${encodeURIComponent(doc.r2Key)}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
+  }).then(r => r.json()).then(body => {
+    if (body.data?.downloadUrl) window.open(body.data.downloadUrl, '_blank')
+  })
+}
+
+async function removeDoc(docId) {
+  if (!managingKb.value) return
+  try {
+    await deleteKnowledgeBaseDocument(managingKb.value.id, docId)
+    ElMessage.success('已删除')
+    if (activeDoc.value?.id === docId) {
+      activeDoc.value = null
+      previewContent.value = ''
+    }
+    documents.value = documents.value.filter(d => d.id !== docId)
+    const kb = kbs.value.find(k => k.id === managingKb.value.id)
+    if (kb && kb.docCount > 0) kb.docCount--
     emit('refreshKbs')
   } catch {
     ElMessage.error('删除失败')
@@ -542,4 +694,193 @@ defineExpose({ loadKbs, refreshKbs })
 .kb-card:hover .kb-del { opacity: 1; }
 
 .kb-del:hover { color: #ef4444; }
+
+.kb-manage {
+  font-size: 14px;
+  color: var(--c-text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+
+.kb-card:hover .kb-manage { opacity: 1; }
+
+.kb-manage:hover { color: var(--c-primary); }
+
+/* ========== 知识库文档管理弹窗 ========== */
+
+.kb-manager-dialog :deep(.el-dialog__header) { padding: 16px 20px; margin: 0; }
+.kb-manager-dialog :deep(.el-dialog__body) { padding: 0; }
+
+.kb-mgr-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.kb-mgr-count {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--c-text-muted);
+}
+
+.kb-mgr-body {
+  display: flex;
+  height: 500px;
+  border-top: 1px solid var(--c-border);
+}
+
+.kb-mgr-list {
+  width: 280px;
+  min-width: 280px;
+  border-right: 1px solid var(--c-border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+}
+
+.kb-mgr-list .doc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.kb-mgr-list .doc-item:hover { background: #f5f4f8; }
+
+.kb-mgr-list .doc-item.active {
+  background: var(--c-primary-light);
+  border-color: var(--c-primary);
+}
+
+.kb-mgr-list .doc-icon {
+  flex-shrink: 0;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.kb-mgr-list .doc-body {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+}
+
+.kb-mgr-list .doc-name {
+  font-size: 13px; font-weight: 500; color: var(--c-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.kb-mgr-list .doc-meta {
+  font-size: 11px; color: var(--c-text-muted); margin-top: 2px;
+}
+
+.kb-mgr-list .doc-del-btn {
+  flex-shrink: 0; opacity: 0; transition: opacity 0.15s;
+}
+
+.kb-mgr-list .doc-item:hover .doc-del-btn { opacity: 1; }
+
+.doc-empty {
+  text-align: center; padding: 40px 0;
+  color: var(--c-text-muted); font-size: 14px;
+}
+
+/* 右侧预览 */
+.kb-mgr-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--c-text-muted);
+  font-size: 14px;
+}
+
+.preview-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.preview-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--c-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: 'SF Mono', Consolas, 'Microsoft YaHei', monospace;
+}
+
+.preview-error {
+  color: #ef4444;
+  font-size: 13px;
+  padding: 20px;
+  text-align: center;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
+
+.preview-placeholder-inner {
+  text-align: center;
+  padding: 40px;
+  color: var(--c-text-muted);
+  font-size: 14px;
+}
+
+.is-loading {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 </style>

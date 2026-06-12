@@ -44,4 +44,8 @@ public interface ChatService {
     String resolveSystemPrompt(Integer agentId);
 
     void saveUserMessage(String content, Integer conversationId);
+
+    String queryKnowledgeBase(String knowledgeBaseIds, String message);
+
+    List<RagFileVO> getRagFiles(Integer id);
 }

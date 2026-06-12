@@ -84,10 +84,19 @@ public class FileService {
                 .key(objectKey)
                 .contentType(file.getContentType())
                 .build();
-        s3Client.putObject(request, RequestBody.fromInputStream(
-                file.getInputStream(),
-                file.getSize()
-        ));
+
+        long start = System.currentTimeMillis();
+
+        s3Client.putObject(
+                request,
+                RequestBody.fromInputStream(
+                        file.getInputStream(),
+                        file.getSize()
+                )
+        );
+
+        log.info("upload cost: {}", System.currentTimeMillis() - start);
+
     }
 
 

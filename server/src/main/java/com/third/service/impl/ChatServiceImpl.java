@@ -14,12 +14,17 @@ import com.third.pojo.entity.AIMessage;
 import com.third.pojo.vo.*;
 import com.third.service.ChatService;
 import com.third.service.FileService;
+import com.third.service.QdrantManager;
+import io.qdrant.client.ConditionFactory;
+import io.qdrant.client.QdrantClient;
+import io.qdrant.client.grpc.Points;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +38,7 @@ import java.security.DigestInputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -51,6 +57,8 @@ public class ChatServiceImpl implements ChatService {
 
     @Autowired
     VectorStore vectorStore;
+    @Autowired
+    QdrantManager qdrantManager;
 
     @Autowired
     ArticleMapper articleMapper;
@@ -66,6 +74,17 @@ public class ChatServiceImpl implements ChatService {
     RagFileMapper ragFileMapper;
 
     private final TokenTextSplitter tokenTextSplitter = new TokenTextSplitter();
+
+    // DashScope Embedding API限制每次最多10条，超出分批提交
+    private void batchAddToVectorStore(List<Document> documents) {
+        int total = documents.size();
+        int batches = (total + 9) / 10;
+        for (int i = 0; i < total; i += 10) {
+            int end = Math.min(i + 10, total);
+            log.info("Qdrant写入进度: {}/{} 批 ({} 条文档)", (i / 10 + 1), batches, end - i);
+            vectorStore.add(new ArrayList<>(documents.subList(i, end)));
+        }
+    }
 
     private void assertConversationOwner(Integer conversationId) {
         Integer userId = UserContext.getUserId();
@@ -86,6 +105,21 @@ public class ChatServiceImpl implements ChatService {
         if (count == null || count == 0) {
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         }
+    }
+
+    // 流式SHA-256，用8KB缓冲区避免大文件一次性加载到内存
+    // Word的MIME类型最长71字符，DB列太短，映射为简短扩展名
+    private static String simplifyContentType(String contentType) {
+        if (contentType == null) return "unknown";
+        return switch (contentType) {
+            case "application/pdf" -> "pdf";
+            case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "docx";
+            case "application/msword" -> "doc";
+            case "text/plain" -> "txt";
+            default -> contentType.contains("officedocument.wordprocessingml") ? "docx"
+                    : contentType.length() > 20 ? contentType.substring(contentType.lastIndexOf('/') + 1)
+                    : contentType;
+        };
     }
 
     // 流式SHA-256，用8KB缓冲区避免大文件一次性加载到内存
@@ -273,6 +307,12 @@ public class ChatServiceImpl implements ChatService {
         // 先删关联的rag文件，再删知识库本身，用事务保证一致性
         ragFileMapper.delete(new LambdaQueryWrapper<RagFile>().eq(RagFile::getKnowledgeBaseId, id));
         knowledgeBaseMapper.deleteById(id);
+        List<RagFile> ragFiles = ragFileMapper.selectList(new LambdaQueryWrapper<RagFile>().eq(RagFile::getKnowledgeBaseId, id));
+        for (RagFile ragFile : ragFiles) {
+            fileService.deleteObject(ragFile.getR2Key());
+        }
+        qdrantManager.deleteByKbId(id);
+
     }
 
     @Override
@@ -293,7 +333,7 @@ public class ChatServiceImpl implements ChatService {
 
                 RagFile ragFile = new RagFile();
                 ragFile.setKnowledgeBaseId(ragFileDTO.getKnowledgeBaseId());
-                ragFile.setFileType(file.getContentType());
+                ragFile.setFileType(simplifyContentType(file.getContentType()));
                 // 防止文件名含../穿越路径
                 String originalFilename = file.getOriginalFilename();
                 String safeFilename = originalFilename != null
@@ -302,12 +342,16 @@ public class ChatServiceImpl implements ChatService {
                 ragFile.setTitle(safeFilename);
                 ragFile.setGmtCreate(LocalDate.now());
                 ragFile.setStatus("READY");
-                ragFile.setR2Key("knowledge/" + safeFilename);
-                // 通过SHA-256去重，相同内容不重复上传
+                ragFile.setR2Key("knowledge_base/" + ragFileDTO.getKnowledgeBaseId() + "/" + safeFilename);
+                // 同KB内SHA-256去重，相同内容不重复上传
                 String hash = sha256(file);
-                RagFile hashexist = ragFileMapper.selectOne(new LambdaQueryWrapper<RagFile>().eq(RagFile::getHash, hash));
-                // 通过标题检测同文件版本覆盖
-                RagFile titleexist = ragFileMapper.selectOne(new LambdaQueryWrapper<RagFile>().eq(RagFile::getTitle, originalFilename));
+                RagFile hashexist = ragFileMapper.selectOne(new LambdaQueryWrapper<RagFile>()
+                        .eq(RagFile::getHash, hash)
+                        .eq(RagFile::getKnowledgeBaseId, ragFileDTO.getKnowledgeBaseId()));
+                // 同KB内标题检测版本覆盖
+                RagFile titleexist = ragFileMapper.selectOne(new LambdaQueryWrapper<RagFile>()
+                        .eq(RagFile::getTitle, originalFilename)
+                        .eq(RagFile::getKnowledgeBaseId, ragFileDTO.getKnowledgeBaseId()));
                 if (hashexist != null) {
                     RagFileVO ragFileVO = new RagFileVO();
                     BeanUtils.copyProperties(hashexist, ragFileVO);
@@ -320,14 +364,17 @@ public class ChatServiceImpl implements ChatService {
                     version = titleexist.getVersion() + 0.01;
                 }
                 ragFile.setVersion(version);
-
                 ragFile.setHash(hash);
+
+                // MySQL insert先获取自增id
                 ragFileMapper.insert(ragFile);
 
-                RagFileVO ragFileVO = new RagFileVO();
-                BeanUtils.copyProperties(ragFile, ragFileVO);
-                ragFileVOList.add(ragFileVO);
-                // 解析文件内容并分片后写入Qdrant，供RAG检索
+                // 先上传R2原始文件（避免PDF解析消耗stream后上传失败）
+                log.info("开始上传R2: {}", safeFilename);
+                fileService.uploadFile(ragFile.getR2Key(), file);
+                log.info("R2上传完成: {}", safeFilename);
+
+                // 再解析文件并写入Qdrant向量库
                 FileDocumentReader reader = documentReaderFactory.getReader(file.getContentType());
                 List<Document> documents = reader.read(file);
                 List<Document> documentList = tokenTextSplitter.apply(documents);
@@ -336,10 +383,11 @@ public class ChatServiceImpl implements ChatService {
                     document.getMetadata().put("kb_id", ragFileDTO.getKnowledgeBaseId());
                     document.getMetadata().put("version", version);
                 }
-                vectorStore.add(documentList);
+                batchAddToVectorStore(documentList);
 
-//        r2存储
-                fileService.uploadFile("knowledge/" + safeFilename, file);
+                RagFileVO ragFileVO = new RagFileVO();
+                BeanUtils.copyProperties(ragFile, ragFileVO);
+                ragFileVOList.add(ragFileVO);
 
             } catch (Exception e){
                 log.error("上传文件失败: {}", e.getMessage(), e);
@@ -373,10 +421,13 @@ public class ChatServiceImpl implements ChatService {
                 String safeTitle = article.getTitle() != null
                         ? article.getTitle().replaceAll("[/\\\\]", "_")
                         : "unnamed";
-                ragFile.setR2Key("knowledge/" + safeTitle + ".md");
+                ragFile.setR2Key("knowledge_base/" + ragFileDTO.getKnowledgeBaseId() + "/" + safeTitle + ".md");
                 String hash = sha256(content);
                 ragFile.setHash(hash);
-                RagFile hashExist = ragFileMapper.selectOne(new LambdaQueryWrapper<RagFile>().eq(RagFile::getHash, hash));
+                // 同KB内去重，不同KB可存同一篇文章
+                RagFile hashExist = ragFileMapper.selectOne(new LambdaQueryWrapper<RagFile>()
+                        .eq(RagFile::getHash, hash)
+                        .eq(RagFile::getKnowledgeBaseId, ragFileDTO.getKnowledgeBaseId()));
                 if(hashExist != null){
                     RagFileVO ragFileVO = new RagFileVO();
                     BeanUtils.copyProperties(hashExist, ragFileVO);
@@ -392,9 +443,9 @@ public class ChatServiceImpl implements ChatService {
                     document.getMetadata().put("kb_id", ragFileDTO.getKnowledgeBaseId());
                     document.getMetadata().put("version", article.getVersion());
                 }
-                vectorStore.add(text);
+                batchAddToVectorStore(text);
 
-                fileService.uploadMarkdown("knowledge/" + safeTitle + ".md", content);
+                fileService.uploadMarkdown(ragFile.getR2Key(), content);
 
             } catch (Exception e){
                 log.error("上传文章失败: {}", e.getMessage(), e);
@@ -426,5 +477,31 @@ public class ChatServiceImpl implements ChatService {
         aiMessage.setConversationId(conversationId);
         aiMessage.setGmtCreate(LocalDateTime.now());
         saveMessage(aiMessage);
+    }
+
+    @Override
+    public String queryKnowledgeBase(String knowledgeBaseIds, String message) {
+        String filter = Arrays.stream(knowledgeBaseIds.split(","))
+                .map(id -> "kb_id == " + id)
+                .collect(Collectors.joining(" || "));
+        SearchRequest searchRequest = SearchRequest.builder()
+                .query(message).topK(2).filterExpression(filter).similarityThreshold(0.01).build();
+        List<Document> documents = vectorStore.similaritySearch(searchRequest);
+        String context = documents.stream().map(Document::getText).collect(Collectors.joining("\n"));
+        return context;
+    }
+
+    @Override
+    public List<RagFileVO> getRagFiles(Integer id) {
+        Integer userId = UserContext.getUserId();
+        KnowledgeBase knowledgeBase = knowledgeBaseMapper.selectOne(new LambdaQueryWrapper<KnowledgeBase>().eq(KnowledgeBase::getId, id));
+        if (!userId.equals(knowledgeBase.getUserId())) {
+            throw new NoAuthorization(RespondCode.UNAUTHORIZED);
+        }
+        return ragFileMapper.selectList(new LambdaQueryWrapper<RagFile>().eq(RagFile::getKnowledgeBaseId, id)).stream().map(ragFile -> {
+            RagFileVO ragFileVO = new RagFileVO();
+            BeanUtils.copyProperties(ragFile, ragFileVO);
+            return ragFileVO;
+        }).collect(Collectors.toList());
     }
 }

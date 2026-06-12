@@ -1,8 +1,8 @@
 # 后端 API 接口文档
 
-> 基础路径: `http://localhost:8080`  
-> 响应格式: `{ "code": 200, "msg": null, "data": ... }`  
-> code=200 成功，code=400 失败
+> 基础路径: `http://localhost:8080`
+> 响应格式: `{ "code": 200, "msg": null, "data": ... }`
+> code=200 成功；业务异常返回对应 HTTP 状态码（401/403/404/500），响应体 `code` 字段随异常变化
 
 ---
 
@@ -19,8 +19,8 @@ POST /user/register
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| name | String | 是 | 2-20 字符 |
-| password | String | 是 | 6-30 字符 |
+| name | String | 是 | 用户名 |
+| password | String | 是 | 密码 |
 
 ```json
 { "name": "zhangsan", "password": "123456" }
@@ -35,13 +35,13 @@ POST /user/register
 **失败响应:**
 
 ```json
-{ "code": 400, "msg": "用户名已存在", "data": null }
+{ "code": 404, "msg": "not found", "data": null }
 ```
 
-**后端需处理:**
-1. 校验 `name` 唯一性
-2. MD5 加密 `password` 后存储
-3. `level` 默认 0，`gmt_create` 设为当前时间
+**后端处理:**
+1. 密码使用 BCrypt 加密后存储（内置随机盐，不可逆）
+2. `level` 默认 0，`gmtCreate` 和 `gmtModified` 设为当前时间
+3. 未做用户名唯一性校验，数据库约束负责
 
 ---
 
@@ -70,7 +70,7 @@ POST /user/login
   "code": 200, "msg": null,
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIs...",
-    "user": { "id": 1, "name": "zhangsan", "image": null, "level": 0 }
+    "user": { "id": 1, "name": "zhangsan", "image": null, "level": 0, "gmtCreate": "2026-05-15T12:00:00" }
   }
 }
 ```
@@ -78,13 +78,14 @@ POST /user/login
 **失败响应:**
 
 ```json
-{ "code": 400, "msg": "用户名或密码错误", "data": null }
+{ "code": 404, "msg": "not found", "data": null }
 ```
 
-**后端需处理:**
+**后端处理:**
 1. 根据 `name` 查询用户
-2. MD5 比对密码
-3. 生成 JWT Token（payload 包含 `userId` 和 `name`，有效期 7 天）
+2. 使用 `BCryptPasswordEncoder.matches()` 比对新密码与数据库中 BCrypt 密文
+3. 生成 JWT Token（payload 含 `UserName` 和 `userId`，有效期 10 天，HS256 签名）
+4. 用户不存在返回 UserCountNotExist(404)，密码错误返回 WrongPassword(404)
 
 ---
 
@@ -108,19 +109,11 @@ Authorization: Bearer {token}
 }
 ```
 
-**失败响应:**
-
-```json
-{ "code": 400, "msg": "未登录或 token 已过期", "data": null }
-```
-
-**后端需处理:**
-1. 从 Authorization 头提取 token 并校验
-2. 根据 token 中 `userId` 查询用户，不返回密码
+**后端处理:** 从 JWT 解析 `userId`，查询用户，密码字段不返回。
 
 ---
 
-### 1.4 更新用户信息
+### 1.4 更新用户信息（昵称）
 
 ```
 PUT /user/info
@@ -131,7 +124,7 @@ PUT /user/info
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| name | String | 是 | 新用户名，2-20 字符 |
+| name | String | 是 | 新用户名 |
 
 ```json
 { "name": "新用户名" }
@@ -144,8 +137,7 @@ PUT /user/info
   "code": 200, "msg": null,
   "data": {
     "id": 1, "name": "新用户名",
-    "image": "avatars/1_1684512000000.jpg", "level": 0,
-    "gmtCreate": "2026-05-15T12:00:00"
+    "image": null, "level": 0, "gmtCreate": "2026-05-15T12:00:00"
   }
 }
 ```
@@ -153,13 +145,13 @@ PUT /user/info
 **失败响应:**
 
 ```json
-{ "code": 400, "msg": "用户名已存在", "data": null }
+{ "code": 400, "msg": "name exist", "data": null }
 ```
 
-**后端需处理:**
-1. 从 `UserContext` 获取当前用户
+**后端处理:**
+1. 从 `UserContext`（ThreadLocal）获取当前用户名
 2. 校验新 `name` 未被他人占用
-3. 更新 `blog.user` 的 `name` 和 `gmt_modified`
+3. 仅更新 `blog.user` 的 `name` 和 `gmtModified`，不更新其他字段
 
 ---
 
@@ -174,7 +166,7 @@ PUT /user/avatar
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| objectKey | String | 是 | R2 存储的 key，如 `avatars/1_1684512000000.jpg` |
+| objectKey | String | 是 | R2 存储的 key |
 
 ```json
 { "objectKey": "avatars/1_1684512000000.jpg" }
@@ -186,47 +178,10 @@ PUT /user/avatar
 { "code": 200, "msg": null, "data": null }
 ```
 
-**后端需处理:**
-1. 从 `UserContext` 获取当前用户
-2. 将 `objectKey` 写入 `blog.user.image`
-3. `image` 存 key（非完整 URL），前端通过 `/file/download/url` 获取预签名 URL 显示
-
----
-
-### 1.6 更新用户密码
-
-```
-PUT /user/password
-认证: 是
-```
-
-**请求体:**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| oldPassword | String | 是 | 当前密码 |
-| newPassword | String | 是 | 新密码，6-30 字符 |
-
-```json
-{ "oldPassword": "123456", "newPassword": "654321" }
-```
-
-**成功响应:**
-
-```json
-{ "code": 200, "msg": null, "data": null }
-```
-
-**失败响应:**
-
-```json
-{ "code": 400, "msg": "当前密码错误", "data": null }
-```
-
-**后端需处理:**
-1. 从 `UserContext` 获取当前用户
-2. MD5 比对 `oldPassword`
-3. 通过后 MD5 加密 `newPassword` 写入 DB，更新 `gmt_modified`
+**后端处理:**
+1. 先从 `UserContext` 获取当前用户
+2. 先更新 DB 中 `image` 字段，再删除 R2 上的旧头像（防止 DB 写失败时旧文件已丢失）
+3. `image` 存储 objectKey（非完整 URL），前端通过 `/file/download/url` 获取预签名 URL 显示
 
 ---
 
@@ -255,9 +210,17 @@ POST /file/upload/url
 ```json
 {
   "code": 200, "msg": null,
-  "data": { "uploadUrl": "https://<r2-presigned-put-url>" }
+  "data": {
+    "uploadUrl": "https://<r2-presigned-put-url>",
+    "publicUrl": "https://<public-domain>/images/xxx.jpg"
+  }
 }
 ```
+
+**后端处理:**
+1. 生成 10 分钟内有效的 R2 预签名上传 URL
+2. `publicUrl` 由 `r2.public-domain` 配置拼接，未配置或为 `http://example.com` 时返回 null
+3. objectKey 未经校验，由调用方保证合法性
 
 ---
 
@@ -265,7 +228,7 @@ POST /file/upload/url
 
 ```
 GET /file/download/url?objectKey=images/xxx.jpg
-认证: 否
+认证: 是
 ```
 
 **请求参数:**
@@ -283,12 +246,14 @@ GET /file/download/url?objectKey=images/xxx.jpg
 }
 ```
 
+**后端处理:** 生成 1 小时内有效的 R2 预签名下载 URL。
+
 ---
 
-**文件上传流程:**
+**文件上传流程（前端）:**
 
 ```
-前端选择图片
+选择文件
   → POST /file/upload/url { objectKey, contentType }  获取上传预签名 URL
   → PUT 预签名 URL（文件直传 R2，不经过后端）
   → PUT /user/avatar { objectKey }                    写入 DB
@@ -311,11 +276,11 @@ POST /article/add
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| title | String | 是 | 文章标题，1-100 字符 |
+| title | String | 是 | 文章标题 |
 | content | String | 是 | Markdown 正文 |
 | tag | List\<String\> | 否 | 标签列表 |
 | image | List\<String\> | 否 | 配图 objectKey 数组 |
-| version | Double | 否 | 版本号，保留两位小数。不传则自动取当前版本 + 0.1 |
+| version | Double | 否 | 版本号，不传则默认 1.0 |
 
 ```json
 {
@@ -323,7 +288,7 @@ POST /article/add
   "content": "# 第一章\n...",
   "tag": ["Java", "Spring"],
   "version": 1.0,
-  "image": ["covers/1_1684512000000.jpg"]
+  "image": ["covers/1_xxx.jpg"]
 }
 ```
 
@@ -333,11 +298,12 @@ POST /article/add
 { "code": 200, "msg": null, "data": { "id": 1 } }
 ```
 
-**后端需处理:**
-1. `writerId` 从 token 获取
-2. `tag` 写入 `article_tag` 和 `tag` 表
-3. `version` 默认 1.0，若前端未传则取 `article` 表当前版本 + 0.1
-4. `gmtCreate` = `gmtModified` = 当前时间
+**后端处理:**
+1. `writerId` 从 JWT 获取，防止客户端伪造
+2. `tag` 写入 `article_tag` 关联表和 `tag` 表
+3. `version` 默认 1.0
+4. `image` 字段以 JSON 数组字符串存储（如 `["covers/1_xxx.jpg"]`）
+5. 创建时将当前内容也写入 `article_version` 归档
 
 ---
 
@@ -348,7 +314,7 @@ PUT /article/{id}
 认证: 是
 ```
 
-**请求体:** 同 3.1，含 `version`
+**请求体:** 同 3.1
 
 ```json
 {
@@ -356,7 +322,7 @@ PUT /article/{id}
   "content": "# 第一章\n...",
   "tag": ["Java", "Spring Boot"],
   "version": 1.1,
-  "image": ["covers/1_1684512000000.jpg"]
+  "image": ["covers/1_xxx.jpg"]
 }
 ```
 
@@ -369,14 +335,14 @@ PUT /article/{id}
 **失败响应:**
 
 ```json
-{ "code": 400, "msg": "只能修改自己的文章", "data": null }
+{ "code": 403, "msg": "forbidden", "data": null }
 ```
 
-**后端需处理:**
+**后端处理:**
 1. 校验当前用户是否为作者
-2. 先将当前文章内容写入 `article_version` 表（自动归档旧版本，使用当前 `article.version` 作为 `version_number`）
-3. 用请求中的 `version` 更新 `article.version`（未传则当前版本 + 0.1）
-4. 更新 `article` 表 + 重建 `article_tag` 关联
+2. 先将当前文章内容和标签归档到 `article_version` 表
+3. 若请求体未传 `version`，则在当前版本上 +0.1（使用 BigDecimal 避免浮点精度误差）
+4. 更新 `article` 表，重建 `article_tag` 关联，清理孤立标签
 5. 更新 `gmtModified`
 
 ---
@@ -394,10 +360,12 @@ DELETE /article/{id}
 { "code": 200, "msg": null, "data": null }
 ```
 
-**后端需处理:**
-1. 校验作者身份
-2. 删除 `article` 记录 + `article_tag` 关联
-3. 遍历 `image` JSON 数组，逐一删除 R2 文件
+**后端处理:**
+1. 用 `baseMapper.selectById` 轻量查询（避免生成预签名 URL）
+2. 校验作者身份
+3. 删除 `article` 记录、`article_tag` 关联、孤立标签
+4. 遍历 `image` JSON 数组，逐一删除 R2 文件
+5. 删除所有版本历史记录
 
 ---
 
@@ -405,7 +373,7 @@ DELETE /article/{id}
 
 ```
 GET /article/{id}
-认证: 否
+认证: 是
 ```
 
 **成功响应:**
@@ -417,9 +385,11 @@ GET /article/{id}
     "id": 1,
     "title": "Spring Boot 入门",
     "content": "# 第一章\n...",
+    "summary": "Spring Boot 入门的第一章内容...",
     "tag": ["Java", "Spring"],
     "image": ["covers/1_xxx.jpg"],
     "imageUrls": ["https://<r2-presigned-url>"],
+    "version": 1.1,
     "writerId": 1,
     "writerName": "zhangsan",
     "gmtCreate": "2026-05-15T12:00:00",
@@ -428,26 +398,27 @@ GET /article/{id}
 }
 ```
 
-**后端需处理:**
+**后端处理:**
 1. JOIN `user` 表取 `writerName`
 2. `tag` 从 `article_tag` 关联表查询
 3. `image` JSON 反序列化后，为每个 key 生成预签名 URL 填入 `imageUrls`
+4. `summary` 为 content 前 200 字符
 
 ---
 
 ### 3.5 文章列表（公开）
 
 ```
-GET /article/list?page=1&size=10&keyword=Spring&tag=Java
-认证: 否
+GET /article/list?page=1&size=12&keyword=Spring&tag=Java
+认证: 是
 ```
 
 **请求参数:**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| page | Integer | 否 | 默认 1 |
-| size | Integer | 否 | 默认 10 |
+| page | int | 是 | 页码，无默认值（客户端必须传） |
+| size | int | 是 | 每页条数 |
 | keyword | String | 否 | 标题/内容模糊搜索 |
 | tag | String | 否 | 按标签名筛选 |
 
@@ -457,7 +428,7 @@ GET /article/list?page=1&size=10&keyword=Spring&tag=Java
 {
   "code": 200, "msg": null,
   "data": {
-    "total": 25, "page": 1, "size": 10,
+    "total": 25, "page": 1, "size": 12,
     "articles": [
       {
         "id": 1, "title": "Spring Boot 入门",
@@ -465,47 +436,9 @@ GET /article/list?page=1&size=10&keyword=Spring&tag=Java
         "tag": ["Java", "Spring"],
         "image": ["covers/1_xxx.jpg"],
         "imageUrls": ["https://<r2-presigned-url>"],
+        "version": 1.1,
         "writerId": 1, "writerName": "zhangsan",
-        "gmtCreate": "2026-05-15T12:00:00"
-      }
-    ]
-  }
-}
-```
-
-**后端需处理:**
-1. PageHelper 分页，返回 `total` / `page` / `size` / `articles`
-2. `content` 截取前 200 字符为 `summary`
-3. `keyword` → LIKE `%keyword%`，`tag` → EXISTS 子查询 `article_tag`
-4. 按 `gmtModified` 降序
-
----
-
-### 3.6 我的文章列表
-
-```
-GET /article/my?page=1&size=10
-认证: 是
-```
-
-**请求参数:** 同 3.5（无需 keyword / tag）
-
-**成功响应:**
-
-```json
-{
-  "code": 200, "msg": null,
-  "data": {
-    "total": 5, "page": 1, "size": 10,
-    "articles": [
-      {
-        "id": 1, "title": "Spring Boot 入门",
-        "summary": "第一章...",
-        "tag": ["Java", "Spring"],
-        "image": ["covers/1_xxx.jpg"],
-        "imageUrls": ["https://<r2-presigned-url>"],
-        "writerId": 1, "writerName": "zhangsan",
-        "gmtCreate": "2026-05-15T12:00:00",
+        "gmtCreated": "2026-05-15T12:00:00",
         "gmtModified": "2026-05-16T08:30:00"
       }
     ]
@@ -513,9 +446,31 @@ GET /article/my?page=1&size=10
 }
 ```
 
-**后端需处理:**
-1. 从 token 获取 `userId`，只返回该用户的文章
-2. 分页结构同 3.5
+**后端处理:**
+1. PageHelper 分页
+2. `keyword` → LIKE `%keyword%`（参数化查询，安全），`tag` → EXISTS 子查询
+3. 列表模式仅生成第一张图的预签名 URL 作为封面，不生成全部图片 URL
+4. 按 `gmtModified` 降序
+
+---
+
+### 3.6 我的文章列表
+
+```
+GET /article/my?page=1&size=12
+认证: 是
+```
+
+**请求参数:**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | int | 是 | 页码 |
+| size | int | 是 | 每页条数 |
+
+**成功响应:** 结构同 3.5
+
+**后端处理:** 从 token 获取 `userId`，只返回该用户的文章。
 
 ---
 
@@ -532,14 +487,25 @@ GET /article/{id}/versions
 {
   "code": 200, "msg": null,
   "data": [
-    { "versionId": 3, "versionNumber": 1.2, "title": "Spring Boot 入门（最新版）", "summary": "...", "gmtCreate": "2026-06-05T16:00:00" },
-    { "versionId": 2, "versionNumber": 1.1, "title": "Spring Boot 入门（修订版）", "summary": "...", "gmtCreate": "2026-06-04T10:00:00" },
-    { "versionId": 1, "versionNumber": 1.0, "title": "Spring Boot 入门", "summary": "...", "gmtCreate": "2026-06-03T08:00:00" }
+    {
+      "id": 3, "articleId": 1, "version": 1.2,
+      "title": "Spring Boot 入门（最新版）",
+      "content": "# 第一章\n...",
+      "tag": "[\"Java\",\"Spring\"]",
+      "gmtCreate": "2026-06-05"
+    },
+    {
+      "id": 2, "articleId": 1, "version": 1.1,
+      "title": "Spring Boot 入门（修订版）",
+      "content": "# 第一章\n...",
+      "tag": "[\"Java\",\"Spring Boot\"]",
+      "gmtCreate": "2026-06-04"
+    }
   ]
 }
 ```
 
-**后端需处理:** 校验当前用户是否为作者，按 `version_number` 降序返回。
+**后端处理:** 校验当前用户是否为作者，按 `version` 降序返回。`tag` 字段为 JSON 数组字符串。
 
 ---
 
@@ -556,20 +522,21 @@ POST /article/{id}/versions/{versionId}/rollback
 {
   "code": 200, "msg": null,
   "data": {
-    "id": 1, "title": "Spring Boot 入门",
+    "id": 3, "articleId": 1, "version": 1.0,
+    "title": "Spring Boot 入门",
     "content": "# 第一章\n...",
-    "tag": ["Java", "Spring"],
-    "writerId": 1, "writerName": "zhangsan",
-    "gmtModified": "2026-06-05T17:00:00"
+    "tag": "[\"Java\",\"Spring\"]",
+    "gmtCreate": "2026-06-03"
   }
 }
 ```
 
-**后端需处理:**
+**后端处理:**
 1. 校验当前用户是否为作者
-2. 用目标版本的内容直接覆盖 `article` 表（`title`、`content`、`tag`），`version` 回到目标版本号
-3. 更新 `gmt_modified`
-4. 当前内容不归档，直接丢弃
+2. 用目标版本的内容直接覆盖 `article` 表（`title`、`content`、`version`）
+3. 重建 tag 关联，清理孤立标签
+4. 更新 `gmtModified`
+5. 当前内容不回滚前不归档
 
 ---
 
@@ -586,133 +553,95 @@ GET /article/{id}/versions/{versionId}
 {
   "code": 200, "msg": null,
   "data": {
-    "versionId": 2, "versionNumber": 1.1,
+    "id": 2, "articleId": 1, "version": 1.1,
     "title": "Spring Boot 入门（修订版）",
     "content": "# 第一章\n...",
-    "tag": ["Java", "Spring Boot"],
-    "gmtCreate": "2026-06-04T10:00:00"
+    "tag": "[\"Java\",\"Spring Boot\"]",
+    "gmtCreate": "2026-06-04"
   }
 }
 ```
 
-**后端需处理:**
-1. 校验当前用户是否为作者
-2. 从 `article_version` 表查询对应版本返回
-
----
-
-### 3.10 版本管理设计
-
-**编辑文章时自动创建版本:** 调用 `PUT /article/{id}` 编辑文章时，后端先将当前内容写入 `article_version` 表，再更新 `article` 表。**前端无需改动。**
-
-**article 表新增字段:**
-
-| 列 | 类型 | 说明 |
-|------|------|------|
-| version | DOUBLE(10,2) | 当前版本号，保留两位小数，默认 1.0 |
-
-**article_version 表:**
-
-| 列 | 类型 | 说明 |
-|------|------|------|
-| id | BIGINT PK | |
-| article_id | BIGINT FK | 关联 article.id |
-| version_number | DOUBLE(10,2) | 版本号，由前端设定或后端自动 +0.1 |
-| title | VARCHAR(100) | 该版本标题 |
-| content | TEXT | 该版本 Markdown 正文 |
-| tag | VARCHAR(500) | 该版本标签（JSON 数组序列化） |
-| gmt_create | DATETIME | 创建时间（即该版本的归档时间） |
-
-**版本号规则:**
-- 新建文章默认 1.0
-- 每次编辑时前端可指定新版本号，未指定则自动 +0.1
-- 回滚操作直接将目标版本内容覆盖 `article` 表，`version` 回到目标版本号，当前内容不归档
-- 版本号精确到两位小数，前端可直接输入如 1.0、1.1、2.5
+**后端处理:** 校验当前用户是否为作者，从 `article_version` 表查询对应版本返回。
 
 ---
 
 ## 四、AI 聊天模块
 
-> 前端路由: `/ai`。存储由后端负责，前端仅做 UI 渲染。
-
----
-
-### 4.1 流式对话
+### 4.1 文本生成（非流式）
 
 ```
-GET /ai/chat/stream?message=你好&conversationId=1&agentId=2&knowledgeBaseIds=1,2
+GET /ai/generate?message=你好
 认证: 是
-Authorization: Bearer {token}
 ```
 
-> 核心 AI 聊天接口。后端自动从指定的知识库中检索相关文本拼入上下文。前端使用 `ReadableStream` 逐块读取 AI 生成内容，实时渲染 Markdown，非标准 SSE 协议。
+**请求参数:**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| message | String | 否 | 默认 "Tell me a joke" |
+
+**成功响应:**
+
+```json
+{
+  "code": 200, "msg": null,
+  "data": { "generation": "你好！有什么可以帮助你的？" }
+}
+```
 
 ---
+
+### 4.2 流式对话
+
+```
+GET /ai/chat/stream?message=你好&conversationId=1&agentId=2
+认证: 是
+```
 
 **请求参数（Query String）:**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | message | String | 是 | 用户消息文本 |
-| conversationId | Integer | 否 | 会话 ID。首次对话不传，后端自动创建会话 |
-| agentId | Integer | 否 | Agent ID，用于匹配自定义 system prompt。未匹配到时使用默认 prompt |
-| knowledgeBaseIds | String | 否 | 逗号分隔的知识库 ID，如 `1,2`。后端据此检索向量数据库取相关文本拼入上下文 |
-
----
+| conversationId | Integer | 否 | 会话 ID |
+| agentId | Integer | 否 | Agent ID 匹配自定义 system prompt |
 
 **响应格式:**
 
-- `Content-Type: text/html;charset=UTF-8`（非标准 SSE，无 `data:` 前缀）
-- 返回 `Flux<String>` 响应式流，AI 逐 token 输出原始文本
-- 前端通过 `response.body.getReader()` 读取字节流，`TextDecoder` 解码后实时渲染 Markdown
-- 流自然结束即响应完成，无结束标记
+- `Content-Type: text/plain`（原始文本流，非 SSE）
+- 返回 `Flux<String>` 响应式流，AI 逐 token 输出
+- 前端通过 `response.body.getReader()` 读取字节流，`TextDecoder` 解码后实时渲染
 
 **流中示例（raw bytes）:**
+
 ```
 你好！有什么可以帮助你的？根据你提供的文章...
 ```
-
----
 
 **后端处理流程:**
 
 ```
 1. 接收参数
-     ├─ conversationId == null → 创建新会话（ai_conversation 表）
      ├─ agentId != null → 查 ai_agent 表取 systemPrompt
      └─ 未匹配 → 使用默认 prompt: "你是一个有帮助的AI助手"
 
-2. 构建上下文
-     ├─ 查 ai_message 表取该会话最近消息（历史对话）
-     ├─ articleIds 非空 → 查 article 表取文章正文
-     └─ fileKeys 非空 → 从 R2 下载文件，解析 PDF/Word/TXT 文本
+2. 查 ai_message 表取该会话历史消息
 
-3. 保存用户消息
-     └─ INSERT INTO ai_message (conversation_id, role='user', content=message, gmt_create)
+3. 保存用户消息到 DB（role=user）
 
-4. 调用 DeepSeek API
-     └─ chatClient.prompt(systemPrompt).user(message).messages(history).stream().content()
+4. 调用 DeepSeek API 流式生成
 
-5. 流式输出（Flux<String>）
-     └─ 逐 token 写入 Response body
-
-6. 流结束后保存 AI 回复
-     └─ INSERT INTO ai_message (conversation_id, role='assistant', content=完整回复, gmt_create)
+5. 流结束后保存 AI 回复到 DB（role=assistant）
 ```
-
----
 
 **前端调用示例:**
 
 ```javascript
-// api/ai.js
-export function streamChat(conversationId, message, agentId, articleIds, fileKeys, signal) {
+export function streamChat(conversationId, message, agentId, signal) {
   const params = new URLSearchParams({ message })
   if (conversationId) params.set('conversationId', conversationId)
   if (agentId) params.set('agentId', agentId)
-  if (articleIds?.length) params.set('articleIds', articleIds.join(','))
-  if (fileKeys?.length) params.set('fileKeys', fileKeys.join(','))
-
   return fetch(`http://localhost:8080/ai/chat/stream?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal
@@ -727,30 +656,13 @@ while (true) {
   const { done, value } = await reader.read()
   if (done) break
   buffer += decoder.decode(value, { stream: true })
-  // 实时更新 UI
   updateMarkdown(buffer)
 }
 ```
 
 ---
 
-**架构图:**
-
-```
-┌──────────────┐     GET /ai/chat/stream?message=...      ┌──────────────┐
-│   Vue 前端    │ ──────────────────────────────────────────→│  Spring Boot │
-│              │                                            │              │
-│ ReadableStream│←── Flux<String> (raw text, chunk by chunk) │  ChatController│
-│ TextDecoder  │                                            │       ↓      │
-│ marked.render│                                            │  ChatService │
-└──────────────┘                                            │       ↓      │
-                                                            │  DeepSeek API│
-                                                            └──────────────┘
-```
-
----
-
-### 4.2 会话列表
+### 4.3 会话列表
 
 ```
 GET /ai/conversations
@@ -765,18 +677,19 @@ GET /ai/conversations
   "data": [
     {
       "id": 1, "title": "Spring Boot 入门问题",
-      "agentId": 2, "gmtCreate": "2026-06-03T16:00:00",
+      "agentId": 2,
+      "gmtCreate": "2026-06-03T16:00:00",
       "gmtModified": "2026-06-03T16:05:00"
     }
   ]
 }
 ```
 
-**后端需处理:** 按当前 `userId` 查询，`gmtModified` 降序。
+**后端处理:** 按当前 `userId` 查询，`gmtModified` 降序。
 
 ---
 
-### 4.3 创建会话
+### 4.4 创建会话
 
 ```
 POST /ai/conversations
@@ -805,7 +718,7 @@ POST /ai/conversations
 
 ---
 
-### 4.4 重命名会话
+### 4.5 重命名会话
 
 ```
 PUT /ai/conversations/{id}
@@ -827,12 +740,14 @@ PUT /ai/conversations/{id}
 **失败响应:**
 
 ```json
-{ "code": 400, "msg": "无权操作", "data": null }
+{ "code": 403, "msg": "forbidden", "data": null }
 ```
+
+**后端处理:** 校验所有权（conversation.userId == 当前用户）。
 
 ---
 
-### 4.5 删除会话
+### 4.6 删除会话
 
 ```
 DELETE /ai/conversations/{id}
@@ -845,11 +760,11 @@ DELETE /ai/conversations/{id}
 { "code": 200, "msg": null, "data": null }
 ```
 
-**后端需处理:** 校验所有权后，级联删除 `ai_message` 中该会话的所有消息。
+**后端处理:** 校验所有权后，级联删除该会话在 `ai_message` 表中的所有消息。
 
 ---
 
-### 4.6 获取会话消息
+### 4.7 获取会话消息
 
 ```
 GET /ai/conversations/{id}/messages
@@ -862,17 +777,17 @@ GET /ai/conversations/{id}/messages
 {
   "code": 200, "msg": null,
   "data": [
-    { "id": 1, "role": "USER", "content": "你好", "gmtCreate": "2026-06-03T16:00:00" },
-    { "id": 2, "role": "ASSISTANT", "content": "你好！有什么可以帮助你的？", "gmtCreate": "2026-06-03T16:00:05" }
+    { "id": 1, "role": "user", "content": "你好", "gmtCreate": "2026-06-03T16:00:00" },
+    { "id": 2, "role": "assistant", "content": "你好！有什么可以帮助你的？", "gmtCreate": "2026-06-03T16:00:05" }
   ]
 }
 ```
 
-**后端需处理:** `role` = `USER` / `ASSISTANT`，按 `gmtCreate` 升序。
+**后端处理:** `role` 为小写 `user` / `assistant`，按 `gmtCreate` 升序。
 
 ---
 
-### 4.7 Agent 列表
+### 4.8 Agent 列表
 
 ```
 GET /ai/agents
@@ -896,7 +811,7 @@ GET /ai/agents
 
 ---
 
-### 4.8 创建 Agent
+### 4.9 创建 Agent
 
 ```
 POST /ai/agents
@@ -912,7 +827,7 @@ POST /ai/agents
 | icon | String | 否 | emoji 图标 |
 
 ```json
-{ "name": "翻译官", "systemPrompt": "你是专业翻译，中英互译，准确地道", "icon": "🌐" }
+{ "name": "翻译官", "systemPrompt": "你是专业翻译，中英互译", "icon": "🌐" }
 ```
 
 **成功响应:**
@@ -926,7 +841,7 @@ POST /ai/agents
 
 ---
 
-### 4.9 删除 Agent
+### 4.10 删除 Agent
 
 ```
 DELETE /ai/agents/{id}
@@ -939,14 +854,11 @@ DELETE /ai/agents/{id}
 { "code": 200, "msg": null, "data": null }
 ```
 
+**后端处理:** 先校验所有权（agent.userId == 当前用户），再删除。
+
 ---
 
 ## 五、RAG 知识库模块
-
-> 基于阿里 DashScope Embedding 实现检索增强生成。
-> 用户上传文件或提交文章 → 后端解析文本 → 分块向量化 → 存入向量库 + R2 + DB → 聊天时自动检索。
-
----
 
 ### 5.1 上传文件到知识库
 
@@ -960,10 +872,21 @@ Content-Type: multipart/form-data
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| files | List\<MultipartFile\> | 是 | 一个或多个 PDF/Word/TXT 文件 |
+| files | List\<MultipartFile\> | 是 | PDF(docx/txt) 文件 |
 | knowledgeBaseId | Integer | 是 | 目标知识库 ID |
 
-**成功响应（JSON 数组）:**
+**后端处理:**
+1. 校验 knowledgeBaseId 所有权
+2. 计算文件 SHA-256，相同 hash 已存在则跳过（去重）
+3. 文件名包含 `/` 或 `\` 时替换为 `_` 防止路径穿越
+4. 文件上传到 R2
+5. 解析文本（PDF→PagePdfDocumentReader，Word→POI XWPF，TXT→Apache Tika）
+6. TokenTextSplitter 分块
+7. 分块向量化写入 Qdrant（元数据: document_id, kb_id, version）
+8. 写入 `rag_file` 表
+9. 单文件失败不影响其他文件
+
+**成功响应:**
 
 ```json
 {
@@ -971,25 +894,14 @@ Content-Type: multipart/form-data
   "data": [
     {
       "id": 1, "title": "Spring Boot 实战.pdf",
-      "fileType": "PDF", "r2Key": "knowledge/1_xxx.pdf",
-      "status": "READY", "gmtCreate": "2026-06-05T16:00:00"
-    },
-    {
-      "id": 2, "title": "Java基础.docx",
-      "fileType": "WORD", "r2Key": "knowledge/2_xxx.docx",
-      "status": "READY", "gmtCreate": "2026-06-05T16:00:05"
+      "fileType": "application/pdf",
+      "r2Key": "knowledge/Spring Boot 实战.pdf",
+      "status": "READY",
+      "gmtCreate": "2026-06-05"
     }
   ]
 }
 ```
-
-**后端需处理:**
-1. 文件上传到 R2（存储原始文件）
-2. 解析文本（PDF→PDFBox, Word→POI, TXT→直接读）
-3. 文本分块（每块 500-1000 tokens，重叠 100 tokens）
-4. 调用 DashScope Embedding 将每块转为向量
-5. 向量写入向量数据库
-6. 写入 `knowledge_document` 表（`status=READY`）
 
 ---
 
@@ -1011,26 +923,28 @@ POST /ai/rag/articles
 { "articleIds": [1, 2, 3], "knowledgeBaseId": 1 }
 ```
 
+**后端处理:**
+1. 根据 `articleIds` 查 `article` 表获取标题和正文
+2. 文章不存在时跳过并记录日志
+3. SHA-256 内容去重，相同内容不重复上传
+4. 将 Markdown 内容分块向量化写入 Qdrant
+5. 同时将内容作为 `.md` 文件上传到 R2
+6. 写入 `rag_file` 表
+
 **成功响应:**
 
 ```json
 {
   "code": 200, "msg": null,
   "data": [
-    { "id": 2, "title": "Spring Boot 入门", "status": "READY" }
+    { "id": 2, "title": "Spring Boot 入门", "fileType": "md", "status": "READY", "gmtCreate": "2026-06-05" }
   ]
 }
 ```
 
-**后端需处理:**
-1. 根据 `articleIds` 查 `article` 表获取标题和正文
-2. 将 Markdown 正文转为同 5.1 的分块→向量化流程
-3. 同时将文章内容转存为 `.md` 文件上传到 R2
-4. 写入 `knowledge_document` 表
-
 ---
 
-### 5.3 知识库管理
+### 5.3 知识库 CRUD
 
 #### 5.3.1 创建知识库
 
@@ -1043,7 +957,7 @@ POST /ai/knowledge-bases
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| name | String | 是 | 知识库名称，1-50 字符 |
+| name | String | 是 | 知识库名称 |
 | description | String | 否 | 描述 |
 
 ```json
@@ -1079,7 +993,7 @@ GET /ai/knowledge-bases
 }
 ```
 
-**后端需处理:** 按当前 `userId` 查询，返回该用户所有知识库。
+**后端处理:** `docCount` 统计 `rag_file` 表中该知识库下的文档数量。
 
 ---
 
@@ -1096,18 +1010,17 @@ DELETE /ai/knowledge-bases/{id}
 { "code": 200, "msg": null, "data": null }
 ```
 
-**后端需处理:**
+**后端处理:**
 1. 校验所有权
-2. 级联删除向量库中该库所有向量
-3. 级联删除 R2 中该库所有源文件
-4. 级联删除 `knowledge_document` 表中该库所有记录
+2. 在事务中先删 `rag_file` 关联记录，再删 `knowledge_base` 记录
+3. 不级联删除 R2 文件和 Qdrant 向量（TODO）
 
 ---
 
-### 5.4 知识库文档列表
+#### 5.3.4 知识库文档列表
 
 ```
-GET /ai/knowledge-bases/{id}/documents?page=1&size=20
+GET /ai/knowledge-bases/{id}/documents
 认证: 是
 ```
 
@@ -1116,105 +1029,100 @@ GET /ai/knowledge-bases/{id}/documents?page=1&size=20
 ```json
 {
   "code": 200, "msg": null,
-  "data": {
-    "total": 5, "page": 1, "size": 20,
-    "documents": [
-      {
-        "id": 1, "title": "Spring Boot 实战.pdf",
-        "fileType": "PDF",
-        "status": "READY",
-        "gmtCreate": "2026-06-05T16:00:00"
-      }
-    ]
-  }
+  "data": [
+    {
+      "id": 1, "title": "Spring Boot 实战.pdf",
+      "fileType": "pdf",
+      "r2Key": "knowledge/xxx.pdf",
+      "status": "READY",
+      "gmtCreate": "2026-06-05"
+    }
+  ]
 }
 ```
 
-### 5.5 删除单个文档
+**后端处理:** 校验知识库所有权，查询 `rag_file` 表按 `gmtCreate` 降序返回。
+
+---
+
+#### 5.3.5 删除单个文档
 
 ```
 DELETE /ai/knowledge-bases/{id}/documents/{docId}
 认证: 是
 ```
 
-**后端需处理:**
-1. 校验所有权
-2. 从向量库删除该文档所有向量
-3. 从 R2 删除源文件
-4. 从 `knowledge_document` 表删除记录
+**成功响应:**
+
+```json
+{ "code": 200, "msg": null, "data": null }
+```
+
+**后端处理:**
+1. 校验知识库所有权
+2. 校验文档属于该知识库
+3. 从 `rag_file` 表删除记录
+4. 不级联删除 R2 文件和 Qdrant 向量（TODO）
 
 ---
 
-### 5.6 数据模型
+### 5.4 数据模型
 
 **knowledge_base**
 
 | 列 | 类型 | 说明 |
 |------|------|------|
-| id | BIGINT PK | |
-| user_id | BIGINT | 所属用户 |
-| name | VARCHAR(50) | 知识库名称 |
-| description | VARCHAR(200) | 描述 |
+| id | INT PK AUTO_INCREMENT | |
+| user_id | INT | 所属用户 |
+| name | VARCHAR | 知识库名称 |
+| description | VARCHAR | 描述 |
 | gmt_create | DATETIME | |
 
-**knowledge_document**
+**rag_file**
 
 | 列 | 类型 | 说明 |
 |------|------|------|
-| id | BIGINT PK | |
-| knowledge_base_id | BIGINT FK | |
-| title | VARCHAR(100) | 文档标题 |
-| file_type | VARCHAR(10) | PDF/WORD/TXT/MD |
-| r2_key | VARCHAR(255) | R2 存储 key |
-| status | VARCHAR(16) | `PROCESSING` 处理中 / `READY` 就绪 / `ERROR` 失败 |
+| id | INT PK AUTO_INCREMENT | |
+| knowledge_base_id | INT | 关联 knowledge_base.id |
+| title | VARCHAR | 文档标题/文件名 |
+| file_type | VARCHAR | MIME 类型或 "md" |
+| r2_key | VARCHAR | R2 存储 key |
+| status | VARCHAR | "READY" |
+| hash | VARCHAR(64) | SHA-256，用于去重 |
+| version | DOUBLE | 版本号 |
+| gmt_create | DATE | |
+
+**ai_message**
+
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK AUTO_INCREMENT | |
+| conversation_id | INT | 关联 ai_conversation.id |
+| role | VARCHAR | user / assistant |
+| content | TEXT | 消息正文 |
 | gmt_create | DATETIME | |
 
-### 5.7 向量存储元数据
+**ai_conversation**
 
-分块后的每一段文本对应一条向量记录，需携带以下元数据：
-
-| 字段 | 类型 | 说明 |
+| 列 | 类型 | 说明 |
 |------|------|------|
-| document_id | BIGINT | 关联 knowledge_document.id，删除文档时据此批量删向量 |
-| kb_id | BIGINT | 关联 knowledge_base.id，检索时过滤知识库范围 |
-| version | DOUBLE | 文档版本号，与 knowledge_document 的版本对应 |
+| id | INT PK AUTO_INCREMENT | |
+| user_id | INT | 所属用户 |
+| title | VARCHAR | 会话标题 |
+| agent_id | INT | 关联 ai_agent.id（可为空） |
+| gmt_create | DATETIME | |
+| gmt_modified | DATETIME | |
 
-> **存储形式示例:**
-> ```json
-> {
->   "id": "<uuid>",
->   "vector": [0.012, -0.034, ...],
->   "payload": { "document_id": 1, "kb_id": 1, "version": 1.0 }
-> }
-> ```
+**ai_agent**
 
-> **Embedding:** 阿里 DashScope `text-embedding-v2`（1536 维），Cosine 距离
-
----
-
-### 5.8 聊天集成流程
-
-```
-用户发送消息
-    → ChatController 接收 knowledgeBaseIds
-    → 校验 knowledgeBaseIds 对应的 knowledge_base.user_id == 当前用户
-    → 对 message 做 DashScope Embedding
-    → 在向量库中检索（filter: kb_id IN knowledgeBaseIds, Top-K by Cosine）
-    → 根据命中向量的 document_id 回查 knowledge_document 获取原文，拼入上下文
-    → 调用 DeepSeek 流式生成
-```
-
-```
-用户发送消息
-    → ChatController 接收 knowledgeBaseIds
-    → 校验 knowledgeBaseIds 对应的 knowledge_base.user_id == 当前用户
-    → 对 message 做 DashScope Embedding
-    → 在向量库中检索与 embedding 最相似的 Top-K 文本块
-    → 拼入 system prompt: "参考以下资料回答：\n{chunks}\n\n用户问题：{message}"
-    → 调用 DeepSeek 流式生成
-```
-
-**注：** 聊天接口（4.1）无需前端传文章 ID 或文件 key，仅传 `knowledgeBaseIds` 即可。
+| 列 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK AUTO_INCREMENT | |
+| user_id | INT | 所属用户 |
+| name | VARCHAR | 名称 |
+| system_prompt | TEXT | 系统指令 |
+| icon | VARCHAR | emoji 图标 |
+| gmt_create | DATETIME | |
 
 ---
 
@@ -1229,14 +1137,13 @@ DELETE /ai/knowledge-bases/{id}/documents/{docId}
 | GET /user/info | 是 |
 | PUT /user/info | 是 |
 | PUT /user/avatar | 是 |
-| PUT /user/password | 是 |
 | POST /file/upload/url | 是 |
-| GET /file/download/url | 否 |
+| GET /file/download/url | 是 |
 | POST /article/add | 是 |
 | PUT /article/{id} | 是 |
 | DELETE /article/{id} | 是 |
-| GET /article/list | 否 |
-| GET /article/{id} | 否 |
+| GET /article/list | 是 |
+| GET /article/{id} | 是 |
 | GET /article/my | 是 |
 | GET /article/{id}/versions | 是 |
 | GET /article/{id}/versions/{versionId} | 是 |
@@ -1245,19 +1152,150 @@ DELETE /ai/knowledge-bases/{id}/documents/{docId}
 
 ### 6.2 拦截器放行规则
 
-`JwtInterceptor` 已拦截 `/**`，以下自动放行:
+`JwtInterceptor` 拦截 `/**`，以下路径放行（无需认证）:
 
-- `POST /user/register`、`POST /user/login`
-- `GET /article/list`、`GET /article/{id}`
-- `GET /file/download/url`
-- Knife4j 文档路径
-- `OPTIONS` 预检请求
+- `POST /user/login`、`POST /user/register`
+- `/doc.html`、`/v3/api-docs/**`、`/webjars/**`、`/swagger-ui/**`
+- `OPTIONS` 预检请求（CORS）
 
-### 6.3 技术决策记录
+### 6.3 响应格式
 
-- **密码**: 当前 MD5，后续迁移 BCrypt
-- **JWT**: jjwt 0.12.6，payload 含 `userId` 和 `name`
-- **分页**: PageHelper 6.1.0 + MyBatis-Plus
-- **文件**: 直传 Cloudflare R2（预签名 URL）
-- **AI**: Spring AI + DeepSeek，流式 SSE
-- **RAG**: 阿里 DashScope text-embedding-v2 Embedding
+- **成功**: HTTP 200，`{"code": 200, "msg": null, "data": ...}`
+- **业务异常**: HTTP 状态码由 BaseException 子类决定（401/403/404），`{"code": <对应HTTP状态码>, "msg": "<异常消息>", "data": null}`
+- **未知异常**: HTTP 500，`{"code": 400, "msg": "服务器内部错误", "data": null}`
+
+### 6.4 技术栈
+
+- **密码**: BCrypt（通过 spring-security-crypto）
+- **JWT**: jjwt 0.12.6，HS256，payload 含 `UserName` 和 `userId`，有效期 10 天
+- **分页**: PageHelper 6.1.0 + MyBatis-Plus 3.5.15
+- **文件存储**: Cloudflare R2（预签名 URL 直传，S3 兼容 SDK aws-sdk-java 2.20.0）
+- **AI**: Spring AI + DeepSeek（deepseek-v4-flash），流式 Flux<String>
+- **RAG Embedding**: 阿里 DashScope text-embedding-v4
+- **向量数据库**: Qdrant
+
+---
+
+## 七、计划实现
+
+> 以下接口/功能已纳入开发计划，尚未实现。
+
+---
+
+### 7.1 修改密码
+
+```
+[计划] PUT /user/password
+认证: 是
+```
+
+**请求体:**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| oldPassword | String | 是 | 当前密码 |
+| newPassword | String | 是 | 新密码，6-30 字符 |
+
+```json
+{ "oldPassword": "123456", "newPassword": "654321" }
+```
+
+**成功响应:**
+
+```json
+{ "code": 200, "msg": null, "data": null }
+```
+
+**失败响应:**
+
+```json
+{ "code": 400, "msg": "当前密码错误", "data": null }
+```
+
+**后端需处理:**
+1. 从 `UserContext` 获取当前用户
+2. `BCryptPasswordEncoder.matches()` 比对 `oldPassword`，不匹配返回 WrongPassword
+3. BCrypt 加密 `newPassword` 写入 DB，更新 `gmtModified`
+
+---
+
+### 7.2 文章列表/详情公开访问
+
+```
+[计划] GET  /article/list     → 认证: 否
+[计划] GET  /article/{id}     → 认证: 否
+```
+
+当前 `JwtInterceptor` 未放行这两个路径，均需认证。计划在 `InterceptorConfig.excludePathPatterns` 中追加 `/article/list`、`/article/{id:[0-9]+}`，改为公开。
+
+---
+
+### 7.3 流式对话 RAG 集成
+
+```
+[计划] GET /ai/chat/stream
+认证: 是
+```
+
+**新增请求参数:**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| message | String | 是 | 用户消息文本 |
+| conversationId | Integer | 否 | 会话 ID（不传则自动创建） |
+| agentId | Integer | 否 | Agent ID |
+| knowledgeBaseIds | String | 否 | 逗号分隔的知识库 ID，如 `1,2` |
+| articleIds | String | 否 | 逗号分隔的文章 ID，作为上下文 |
+| fileKeys | String | 否 | 逗号分隔的 R2 key，下载解析文本 |
+
+**计划处理流程:**
+
+```
+1. 校验 knowledgeBaseIds 对应的 knowledge_base.user_id == 当前用户
+2. 对 message 做 DashScope Embedding（text-embedding-v4，1536 维）
+3. 在 Qdrant 中检索 Top-K 相似向量（Cosine 距离，filter: kb_id IN knowledgeBaseIds）
+4. 根据命中向量元数据（document_id）回查 rag_file 获取来源信息
+5. 将检索文本块拼入 system prompt:
+   "参考以下资料回答用户问题：\n---\n{chunk1}\n---\n{chunk2}\n---\n\n用户问题：{message}"
+6. articleIds → 查 article 表取正文，追加到上下文
+7. fileKeys → 从 R2 下载文件，解析文本（PDF/Word/TXT），追加到上下文
+8. 调用 DeepSeek 流式生成
+```
+
+---
+
+### 7.4 删除知识库完善
+
+```
+[计划] DELETE /ai/knowledge-bases/{id}
+```
+
+当前仅删除 DB 中 `rag_file` 和 `knowledge_base` 记录。计划补充级联：
+
+1. 从 Qdrant 批量删除该知识库所有向量（按 `metadata.kb_id` 过滤）
+2. 遍历 `rag_file` 表中该库的所有 `r2_key`，逐一删除 R2 文件
+3. 以上操作在事务中执行，失败时回滚
+
+---
+
+### 7.5 自动创建会话
+
+当前流式对话要求客户端先 `POST /ai/conversations` 显式创建会话。计划改为：
+
+- `conversationId` 不传或为 null 时，`ChatServiceImpl` 自动创建 `ai_conversation`
+- `title` 取 message 前 30 字符（超过截断加 `...`）
+- 会话创建后，将 `conversationId` 附加到首次流式响应事件中通知前端
+
+---
+
+### 7.8 注册用户名去重
+
+```
+[计划] POST /user/register
+```
+
+当前注册未校验用户名唯一性，依赖 DB 唯一约束抛异常。计划在 `UserService.register()` 中先查询 `blog.user`，若 `name` 已存在则返回明确错误：
+
+```json
+{ "code": 400, "msg": "用户名已存在", "data": null }
+```

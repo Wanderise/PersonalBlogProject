@@ -1,5 +1,6 @@
 package com.third.common.config;
 
+import io.qdrant.client.QdrantClient;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.deepseek.DeepSeekChatModel;
 import org.springframework.context.annotation.Bean;

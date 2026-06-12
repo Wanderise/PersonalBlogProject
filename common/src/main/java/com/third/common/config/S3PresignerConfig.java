@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.net.URI;
+import java.time.Duration;
 
 @Configuration
 public class S3PresignerConfig {
@@ -44,6 +45,9 @@ public class S3PresignerConfig {
                 ))
                 .region(Region.of(region))
                 .endpointOverride(URI.create(endpoint))
+                .overrideConfiguration(c -> c
+                        .apiCallTimeout(Duration.ofSeconds(3000))
+                        .apiCallAttemptTimeout(Duration.ofSeconds(1000)))
                 .build();
     }
 }

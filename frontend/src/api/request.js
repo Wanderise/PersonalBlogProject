@@ -26,9 +26,13 @@ service.interceptors.response.use(
     if (error.response) {
       const { status } = error.response
       if (status === 401) {
-        const { clearAuth } = useAuth()
-        clearAuth()
-        window.location.href = '/login'
+        // 只有登录接口的401才说明凭证失效，其他接口401是权限问题（如KB不属当前用户）
+        const isAuthEndpoint = error.config.url?.includes('/user/login')
+        if (isAuthEndpoint) {
+          const { clearAuth } = useAuth()
+          clearAuth()
+          window.location.href = '/login'
+        }
       } else if (status >= 500) {
         console.error('服务器内部错误')
       }

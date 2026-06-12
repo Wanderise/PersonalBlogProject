@@ -30,6 +30,7 @@
       :selected-kb-ids="selectedKbIds"
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
       @send="handleSend"
+      @kb-refresh="loadKbs"
       ref="chatViewRef"
     />
 
@@ -161,16 +162,22 @@ async function handleSend({ text, attachments }) {
 
   const attList = attachments || []
   const hasAttach = attList.length > 0
+  const attachNames = hasAttach ? attList.map(a => a.name).join('、') : ''
+  const aiPrompt = text || (hasAttach ? `请参考知识库中刚上传的文件：${attachNames}` : '')
+
   messages.value.push({
     role: 'user',
-    content: text || '(发送了附件)',
-    attachments: hasAttach ? attList.map(a => ({ type: a.type, name: a.name })) : undefined
+    content: text || '',
+    attachments: hasAttach ? attList.map(a => ({ type: a.type, name: a.name, r2Key: a.r2Key, id: a.id })) : undefined
   })
 
   if (!activeConv.value || activeConv.value.title === '新对话') {
-    const title = text ? (text.slice(0, 30) + (text.length > 30 ? '...' : '')) : (hasAttach ? '附件对话' : '新对话')
+    const title = text ? (text.slice(0, 30) + (text.length > 30 ? '...' : '')) : (hasAttach ? `附件：${attList[0].name}` : '新对话')
     const conv = conversations.value.find(c => c.id === convId)
-    if (conv) conv.title = title
+    if (conv) {
+      conv.title = title
+      renameConversation(convId, title).catch(() => {})
+    }
   }
 
   streaming.value = true
@@ -180,7 +187,7 @@ async function handleSend({ text, attachments }) {
     abortCtrl = new AbortController()
     const response = await streamChat(
       convId,
-      text || '请参考附件内容',
+      aiPrompt,
       selectedAgent.value,
       selectedKbIds.value,
       abortCtrl.signal

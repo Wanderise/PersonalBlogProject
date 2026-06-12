@@ -31,8 +31,14 @@
         <div class="msg-bubble">
           <div class="markdown-body" v-html="renderMarkdown(msg.content)" />
           <div v-if="msg.attachments?.length" class="msg-attach-tags">
-            <span v-for="(att, j) in msg.attachments" :key="j" class="msg-attach-tag">
-              <el-icon><Document v-if="att.type === 'article'" /><FolderOpened v-else /></el-icon>
+            <span v-for="(att, j) in msg.attachments" :key="j" class="msg-attach-tag clickable"
+              @click="openAttachment(att)" :title="att.type==='article'?'查看文章':'查看文件'">
+              <el-icon v-if="att.type === 'article'"><Document /></el-icon>
+              <el-icon v-else-if="fileIcon(att.name) === 'pdf'" color="#ef4444"><Document /></el-icon>
+              <el-icon v-else-if="fileIcon(att.name) === 'docx'" color="#3b82f6"><Document /></el-icon>
+              <el-icon v-else-if="fileIcon(att.name) === 'txt'" color="#22c55e"><Tickets /></el-icon>
+              <el-icon v-else-if="fileIcon(att.name) === 'md'" color="#8b5cf6"><Notebook /></el-icon>
+              <el-icon v-else><FolderOpened /></el-icon>
               {{ att.name }}
             </span>
           </div>
@@ -52,7 +58,7 @@
     </div>
 
     <div class="chat-input-area">
-      <div class="attach-chips" v-if="attachments.length || pendingFiles.length">
+      <div class="attach-chips" v-if="attachments.length || pendingFiles.length || pendingArticles.length">
         <div v-for="(att, i) in attachments" :key="'att-'+i" class="attach-chip">
           <el-icon v-if="att.type === 'article'"><Document /></el-icon>
           <el-icon v-else><FolderOpened /></el-icon>
@@ -64,6 +70,12 @@
           <span class="chip-name">{{ file.name }}</span>
           <span class="pending-badge">待发送</span>
           <el-icon class="chip-remove" @click="removePendingFile(i)"><CircleClose /></el-icon>
+        </div>
+        <div v-for="(art, i) in pendingArticles" :key="'pa-'+i" class="attach-chip pending">
+          <el-icon><Document /></el-icon>
+          <span class="chip-name">{{ art.name }}</span>
+          <span class="pending-badge">待发送</span>
+          <el-icon class="chip-remove" @click="removePendingArticle(i)"><CircleClose /></el-icon>
         </div>
       </div>
       <div class="input-wrapper">
@@ -111,6 +123,12 @@
           <el-icon v-if="!uploading"><Promotion /></el-icon>
         </el-button>
       </div>
+      <!-- 上传进度条 -->
+      <div v-if="uploading" class="upload-progress-bar">
+        <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+        <span class="upload-progress-text">{{ uploadProgress >= 100 ? '上传完成' : '上传中...' }}</span>
+      </div>
+
       <p class="input-hint">AI 回答可能存在错误，请注意甄别。可附带文章/文件作为上下文</p>
 
       <input
@@ -162,11 +180,24 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Expand, Promotion, CirclePlus, Document, FolderOpened, CircleClose, Search } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { getMyArticles } from '@/api/article.js'
 import { uploadRagFiles, submitRagArticles } from '@/api/ai.js'
+
+const router = useRouter()
+
+function fileIcon(name) {
+  if (!name) return ''
+  const ext = name.split('.').pop().toLowerCase()
+  if (ext === 'pdf') return 'pdf'
+  if (ext === 'docx' || ext === 'doc') return 'docx'
+  if (ext === 'txt') return 'txt'
+  if (ext === 'md') return 'md'
+  return ext
+}
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
@@ -177,7 +208,7 @@ const props = defineProps({
   selectedKbIds: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['toggle-sidebar', 'send', 'update:streaming', 'update:streamContent'])
+const emit = defineEmits(['toggle-sidebar', 'send', 'update:streaming', 'update:streamContent', 'kb-refresh'])
 
 const inputText = ref('')
 const inputRef = ref(null)
@@ -186,7 +217,8 @@ const scrollAnchor = ref(null)
 const fileInputRef = ref(null)
 
 const attachments = ref([])
-const pendingFiles = ref([]) // 待发送文件，发送时才上传
+const pendingFiles = ref([])      // 待发送文件，发送时才上传
+const pendingArticles = ref([])   // 待发送文章，发送时才上传
 const showAttachMenu = ref(false)
 const showArticleDialog = ref(false)
 const articleSearch = ref('')
@@ -194,9 +226,11 @@ const articleLoading = ref(false)
 const selectedArticleIds = ref([])
 const articles = ref([])
 const uploading = ref(false)
+const uploadProgress = ref(0)
+let progressTimer = null
 
 const canSend = computed(() => {
-  return (inputText.value.trim() || attachments.value.length || pendingFiles.value.length) && !props.streaming && !uploading.value
+  return (inputText.value.trim() || attachments.value.length || pendingFiles.value.length || pendingArticles.value.length) && !props.streaming && !uploading.value
 })
 
 const agentGreeting = computed(() => {
@@ -232,25 +266,54 @@ async function handleEnter() {
   if (!canSend.value) return
   const text = inputText.value.trim()
 
-  // 发送时先上传待发送文件（有KB则索引，无KB仅上传到R2显示在附件中）
-  if (pendingFiles.value.length) {
+  // 发送时先上传待发送文件和文章
+  const hasPending = pendingFiles.value.length > 0 || pendingArticles.value.length > 0
+  if (hasPending) {
     uploading.value = true
+    uploadProgress.value = 0
+    progressTimer = setInterval(() => {
+      if (uploadProgress.value < 90) uploadProgress.value += 5
+    }, 100)
     const kbId = props.selectedKbIds?.length ? props.selectedKbIds[0] : null
     try {
       if (kbId) {
-        const fetchRes = await uploadRagFiles(pendingFiles.value, kbId)
-        if (!fetchRes.ok) throw new Error('Upload failed')
-        const body = await fetchRes.json()
-        if (body.code !== 200) throw new Error(body.msg || 'Upload failed')
+        // 上传文件
+        if (pendingFiles.value.length) {
+          const fetchRes = await uploadRagFiles(pendingFiles.value, kbId)
+          if (!fetchRes.ok) throw new Error('Upload failed')
+          const body = await fetchRes.json()
+          if (body.code !== 200) throw new Error(body.msg || 'Upload failed')
+          const docs = body.data || []
+          for (const doc of docs) {
+            attachments.value.push({ type: 'file', name: doc.title, r2Key: doc.r2Key, id: doc.id })
+          }
+        }
+        // 上传文章
+        if (pendingArticles.value.length) {
+          const articleIds = pendingArticles.value.map(a => a.id)
+          const artRes = await submitRagArticles(articleIds, kbId)
+          if (artRes.code !== 200) throw new Error(artRes.msg || 'Upload failed')
+        }
+        emit('kb-refresh')
+      } else {
+        for (const file of pendingFiles.value) {
+          attachments.value.push({ type: 'file', name: file.name })
+        }
       }
-      for (const file of pendingFiles.value) {
-        attachments.value.push({ type: 'file', name: file.name })
+      // 将待发送文件/文章移入附件显示列表
+      for (const art of pendingArticles.value) {
+        if (!attachments.value.find(a => a.type === 'article' && a.id === art.id)) {
+          attachments.value.push(art)
+        }
       }
     } catch {
-      ElMessage.error('文件上传失败')
+      ElMessage.error('上传失败')
     }
+    clearInterval(progressTimer)
+    uploadProgress.value = 100
     pendingFiles.value = []
-    uploading.value = false
+    pendingArticles.value = []
+    setTimeout(() => { uploading.value = false; uploadProgress.value = 0 }, 500)
   }
 
   // 允许只发文件不发文本
@@ -273,8 +336,35 @@ function removeAttachment(i) {
   attachments.value.splice(i, 1)
 }
 
+async function openAttachment(att) {
+  if (att.type === 'article' && att.id) {
+    router.push(`/article/${att.id}`)
+  } else if (att.r2Key) {
+    try {
+      const BASE = 'http://localhost:8080'
+      const res = await fetch(`${BASE}/file/download/url?objectKey=${encodeURIComponent(att.r2Key)}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
+      })
+      const body = await res.json()
+      if (body.code === 200 && body.data?.downloadUrl) {
+        window.open(body.data.downloadUrl, '_blank')
+      } else {
+        ElMessage.warning('无法获取文件链接')
+      }
+    } catch {
+      ElMessage.error('获取文件失败')
+    }
+  } else {
+    ElMessage.info('文件未上传到知识库，无法预览')
+  }
+}
+
 function removePendingFile(i) {
   pendingFiles.value.splice(i, 1)
+}
+
+function removePendingArticle(i) {
+  pendingArticles.value.splice(i, 1)
 }
 
 async function openArticleSelector() {
@@ -293,26 +383,18 @@ async function confirmArticles() {
   const kbId = getUploadKbId()
   if (!kbId || !selectedArticleIds.value.length) return
 
-  try {
-    const res = await submitRagArticles(selectedArticleIds.value, kbId)
-    const data = res.data
-    if (res.code !== 200) throw new Error(res.msg)
-    const count = Array.isArray(data) ? data.length : selectedArticleIds.value.length
-    ElMessage.success(`${count} 篇文章已加入知识库`)
-
-    const selected = articles.value.filter(a => selectedArticleIds.value.includes(a.id))
-    for (const article of selected) {
-      if (!attachments.value.find(a => a.type === 'article' && a.id === article.id)) {
-        attachments.value.push({ type: 'article', id: article.id, name: article.title })
-      }
+  const selected = articles.value.filter(a => selectedArticleIds.value.includes(a.id))
+  for (const article of selected) {
+    if (!pendingArticles.value.find(a => a.id === article.id) &&
+        !attachments.value.find(a => a.type === 'article' && a.id === article.id)) {
+      pendingArticles.value.push({ type: 'article', id: article.id, name: article.title })
     }
-  } catch {
-    ElMessage.error('提交失败，请重试')
   }
 
   selectedArticleIds.value = []
   articleSearch.value = ''
   showArticleDialog.value = false
+  ElMessage.success(`已选择 ${selected.length} 篇文章，发送消息时一并上传`)
 }
 
 function getUploadKbId() {
@@ -325,6 +407,10 @@ function getUploadKbId() {
 
 function openFilePicker() {
   showAttachMenu.value = false
+  if (!props.selectedKbIds?.length) {
+    ElMessage.warning('请先在左侧选择知识库')
+    return
+  }
   fileInputRef.value?.click()
 }
 
@@ -687,6 +773,16 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   color: var(--c-primary);
 }
 
+.msg-attach-tag.clickable {
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.msg-attach-tag.clickable:hover {
+  background: rgba(124, 58, 237, 0.2);
+  transform: translateY(-1px);
+}
+
 /* ========== 文章选择弹窗 ========== */
 
 .article-search { margin-bottom: 14px; }
@@ -743,5 +839,34 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   font-size: 11px;
   color: var(--c-text-muted);
   margin: 8px 0 0;
+}
+
+/* ========== 上传进度条 ========== */
+
+.upload-progress-bar {
+  position: relative;
+  height: 22px;
+  background: #e5e7eb;
+  border-radius: 11px;
+  margin: 8px 0 0;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  border-radius: 11px;
+  transition: width 0.3s ease;
+}
+
+.upload-progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #374151;
+  font-weight: 500;
 }
 </style>

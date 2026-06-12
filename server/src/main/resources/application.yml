@@ -1,6 +1,10 @@
 spring:
   application:
     name: server
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
   autoconfigure:
     exclude:
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAudioSpeechAutoConfiguration
@@ -25,7 +29,6 @@ spring:
         host: localhost
         port: 6334
         collection-name: my-collection
-
 
 knife4j:
   enable: true
