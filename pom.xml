@@ -32,6 +32,7 @@
         <dashscope>1.1.2.0</dashscope>
         <poi>5.4.0</poi>
         <tika>3.3.1</tika>
+        <redis>2.7.3</redis>
     </properties>
     <modules>
         <module>server</module>
@@ -152,6 +153,18 @@
                 <groupId>org.apache.tika</groupId>
                 <artifactId>tika-parsers-standard-package</artifactId>
                 <version>${tika}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-redis</artifactId>
+                <version>${redis}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-cache</artifactId>
+                <version>${redis}</version>
             </dependency>
 
         </dependencies>

@@ -29,6 +29,13 @@ spring:
         host: localhost
         port: 6334
         collection-name: my-collection
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      password:
+
 
 knife4j:
   enable: true
