@@ -1,200 +1,218 @@
-<script setup>
-</script>
-
 <template>
   <div class="home-page">
-    <section class="hero">
-      <div class="hero-badge">书写 · 沉淀 · 分享</div>
-      <h1>用文字记录每一次思考</h1>
-      <p>一个安静的技术博客空间，在这里沉淀你的学习与成长</p>
-      <div class="hero-actions">
-        <router-link to="/editor" class="hero-btn hero-btn-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-          开始写作
+    <section class="dashboard-head">
+      <div>
+        <span class="head-kicker">{{ greeting }}</span>
+        <h1>继续记录你的思考</h1>
+        <p>写下一篇新文章，或从最近的内容继续整理。</p>
+      </div>
+      <div class="head-actions">
+        <router-link to="/ai" class="action secondary">
+          <el-icon><MagicStick /></el-icon>AI 工作台
         </router-link>
-        <router-link to="/User/1/list" class="hero-btn hero-btn-ghost">浏览文章</router-link>
+        <router-link to="/editor" class="action primary">
+          <el-icon><EditPen /></el-icon>开始写作
+        </router-link>
       </div>
     </section>
 
-    <section class="features">
-      <router-link to="/editor" class="feature-card">
-        <div class="feature-icon" style="background: #f5f3ff; color: #7c3aed;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-        </div>
-        <h3>写文章</h3>
-        <p>Markdown 编辑器，支持图片上传与标签管理</p>
+    <section class="overview-band">
+      <div class="metric">
+        <span>我的文章</span>
+        <strong>{{ total }}</strong>
+      </div>
+      <div class="metric">
+        <span>最近更新</span>
+        <strong class="metric-date">{{ latestDate }}</strong>
+      </div>
+      <router-link to="/User/1/list" class="discover-link">
+        <el-icon><Compass /></el-icon>
+        <span><b>发现新内容</b><small>浏览社区中的文章</small></span>
+        <el-icon><ArrowRight /></el-icon>
       </router-link>
+    </section>
 
-      <router-link to="/User/1/articles" class="feature-card">
-        <div class="feature-icon" style="background: #ecfdf5; color: #10b981;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-          </svg>
+    <section class="recent-section">
+      <div class="section-heading">
+        <div>
+          <span>YOUR WRITING</span>
+          <h2>最近文章</h2>
         </div>
-        <h3>我的文章</h3>
-        <p>随时管理和编辑已发布的文章</p>
-      </router-link>
+        <router-link to="/User/1/articles">查看全部 <el-icon><ArrowRight /></el-icon></router-link>
+      </div>
 
-      <router-link to="/User/1/list" class="feature-card">
-        <div class="feature-icon" style="background: #fef3c7; color: #f59e0b;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-        </div>
-        <h3>发现</h3>
-        <p>浏览大家的精彩文章，发现新知识</p>
-      </router-link>
+      <div v-if="loading" class="loading-list">
+        <el-skeleton :rows="3" animated />
+      </div>
+      <div v-else-if="recentArticles.length" class="article-list">
+        <button v-for="article in recentArticles" :key="article.id" @click="openArticle(article.id)">
+          <span class="article-icon"><el-icon><Document /></el-icon></span>
+          <span class="article-copy">
+            <b>{{ article.title }}</b>
+            <small>{{ article.summary || '暂无摘要' }}</small>
+          </span>
+          <time>{{ formatDate(article.gmtModified || article.gmtCreate) }}</time>
+          <el-icon class="row-arrow"><ArrowRight /></el-icon>
+        </button>
+      </div>
+      <div v-else class="empty-writing">
+        <el-icon><Document /></el-icon>
+        <div><b>还没有文章</b><span>第一篇不必完美，只需要开始。</span></div>
+        <router-link to="/editor">写第一篇</router-link>
+      </div>
     </section>
   </div>
 </template>
 
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ArrowRight, Compass, Document, EditPen, MagicStick } from '@element-plus/icons-vue'
+import { getMyArticles } from '@/api/article.js'
+
+const router = useRouter()
+const loading = ref(true)
+const recentArticles = ref([])
+const total = ref(0)
+
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 11) return '早上好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+
+const latestDate = computed(() => {
+  const article = recentArticles.value[0]
+  return article ? formatDate(article.gmtModified || article.gmtCreate) : '--'
+})
+
+onMounted(async () => {
+  try {
+    const res = await getMyArticles({ page: 1, size: 4 })
+    recentArticles.value = res.data?.articles || []
+    total.value = res.data?.total || 0
+  } catch {
+    recentArticles.value = []
+  } finally {
+    loading.value = false
+  }
+})
+
+function formatDate(value) {
+  if (!value) return '--'
+  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(new Date(value))
+}
+
+function openArticle(id) {
+  router.push(`/article/${id}`)
+}
+</script>
+
 <style scoped>
-.home-page {
-  max-width: 960px;
-  margin: 0 auto;
-}
+.home-page { max-width: 1040px; margin: 0 auto; }
 
-/* === Hero === */
-.hero {
-  text-align: center;
-  padding: 80px 20px 56px;
-}
-
-.hero-badge {
-  display: inline-block;
-  padding: 5px 18px;
-  background: var(--c-primary-light);
-  color: var(--c-primary);
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 28px;
-  letter-spacing: 0.04em;
-}
-
-.hero h1 {
-  font-size: 42px;
-  font-weight: 750;
-  color: var(--c-text);
-  letter-spacing: -0.025em;
-  line-height: 1.2;
-  margin-bottom: 16px;
-}
-
-.hero p {
-  font-size: 18px;
-  color: var(--c-text-secondary);
-  line-height: 1.6;
-  max-width: 460px;
-  margin: 0 auto 40px;
-}
-
-.hero-actions {
+.dashboard-head {
   display: flex;
-  gap: 12px;
-  justify-content: center;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 34px 0 30px;
+  border-bottom: 1px solid var(--c-border);
 }
 
-.hero-btn {
+.head-kicker { display: block; margin-bottom: 8px; color: var(--c-primary); font-size: 12px; font-weight: 700; }
+.dashboard-head h1 { font-family: Georgia, "Microsoft YaHei", serif; font-size: 36px; line-height: 1.2; font-weight: 600; color: var(--c-text); }
+.dashboard-head p { margin-top: 10px; color: var(--c-text-secondary); font-size: 15px; }
+.head-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.action {
+  height: 40px;
+  padding: 0 15px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 13px 28px;
-  border-radius: var(--radius-sm);
-  font-size: 15px;
+  gap: 7px;
+  font-size: 13px;
   font-weight: 600;
-  text-decoration: none;
-  transition: all 0.25s ease;
 }
+.action.primary { background: var(--c-primary); color: #fff; }
+.action.primary:hover { background: var(--c-primary-dark); }
+.action.secondary { background: #fff; color: var(--c-text-secondary); border: 1px solid var(--c-border); }
+.action.secondary:hover { color: var(--c-primary); border-color: #afd5ca; }
 
-.btn-icon { width: 18px; height: 18px; }
-
-.hero-btn-primary {
-  background: var(--c-primary);
-  color: #fff;
-  box-shadow: 0 4px 16px var(--c-primary-glow);
-}
-
-.hero-btn-primary:hover {
-  background: var(--c-primary-dark);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 24px var(--c-primary-glow);
-}
-
-.hero-btn-ghost {
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border);
-}
-
-.hero-btn-ghost:hover {
-  border-color: var(--c-primary);
-  color: var(--c-primary);
-  transform: translateY(-2px);
-  box-shadow: var(--c-shadow-md);
-}
-
-/* === Features === */
-.features {
+.overview-band {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  padding: 0 20px 48px;
+  grid-template-columns: 160px 190px minmax(240px, 1fr);
+  align-items: stretch;
+  border-bottom: 1px solid var(--c-border);
 }
+.metric { padding: 24px 22px 24px 0; display: flex; flex-direction: column; gap: 5px; }
+.metric + .metric { padding-left: 24px; border-left: 1px solid var(--c-border); }
+.metric span { color: var(--c-text-muted); font-size: 11px; font-weight: 600; }
+.metric strong { color: var(--c-text); font-size: 28px; line-height: 1.2; }
+.metric .metric-date { font-size: 20px; }
 
-.feature-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 40px 28px;
-  background: var(--c-surface);
-  border-radius: var(--radius);
-  border: 1px solid var(--c-border);
-  text-decoration: none;
-  transition: all 0.3s ease;
-}
-
-.feature-card:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--c-shadow-lg);
-  border-color: transparent;
-}
-
-.feature-icon {
-  width: 56px;
-  height: 56px;
+.discover-link {
+  margin: 14px 0 14px 24px;
+  padding: 13px 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  margin-bottom: 22px;
+  gap: 12px;
+  color: var(--c-text-secondary);
+  background: var(--c-accent-light);
+  border-radius: 8px;
 }
+.discover-link > span { flex: 1; display: flex; flex-direction: column; }
+.discover-link b { color: var(--c-text); font-size: 13px; }
+.discover-link small { color: var(--c-text-muted); font-size: 11px; }
+.discover-link:hover { color: var(--c-accent); }
 
-.feature-icon svg { width: 26px; height: 26px; }
+.recent-section { padding: 38px 0; }
+.section-heading { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 18px; }
+.section-heading span { color: var(--c-text-muted); font-size: 10px; font-weight: 700; }
+.section-heading h2 { margin-top: 3px; color: var(--c-text); font-size: 21px; }
+.section-heading a { display: inline-flex; align-items: center; gap: 4px; color: var(--c-primary); font-size: 12px; font-weight: 600; }
 
-.feature-card h3 {
-  font-size: 17px;
-  font-weight: 650;
-  color: var(--c-text);
-  margin-bottom: 8px;
+.article-list { border-top: 1px solid var(--c-border); }
+.article-list button {
+  width: 100%;
+  min-height: 76px;
+  padding: 12px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--c-border-light);
+  background: transparent;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 82px 20px;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
 }
+.article-list button:hover { background: #f8faf8; }
+.article-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; background: var(--c-primary-light); color: var(--c-primary); }
+.article-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.article-copy b { overflow: hidden; color: var(--c-text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.article-copy small { overflow: hidden; color: var(--c-text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.article-list time { color: var(--c-text-muted); font-size: 11px; text-align: right; }
+.row-arrow { color: var(--c-text-muted); }
+.loading-list { padding: 18px 0; }
 
-.feature-card p {
-  font-size: 14px;
-  color: var(--c-text-muted);
-  line-height: 1.55;
-  max-width: 200px;
-}
+.empty-writing { min-height: 120px; padding: 20px; border: 1px dashed var(--c-border); display: flex; align-items: center; gap: 14px; color: var(--c-text-muted); }
+.empty-writing > .el-icon { font-size: 24px; color: var(--c-primary); }
+.empty-writing div { flex: 1; display: flex; flex-direction: column; }
+.empty-writing b { color: var(--c-text); font-size: 14px; }
+.empty-writing span { font-size: 12px; }
+.empty-writing a { color: var(--c-primary); font-size: 13px; font-weight: 600; }
 
-@media (max-width: 640px) {
-  .hero h1 { font-size: 28px; }
-  .features { grid-template-columns: 1fr; }
+@media (max-width: 700px) {
+  .dashboard-head { align-items: flex-start; flex-direction: column; padding-top: 18px; }
+  .dashboard-head h1 { font-size: 29px; }
+  .head-actions { width: 100%; }
+  .action { flex: 1; justify-content: center; }
+  .overview-band { grid-template-columns: 1fr 1fr; }
+  .discover-link { grid-column: 1 / -1; margin: 0 0 18px; }
+  .article-list button { grid-template-columns: 34px minmax(0, 1fr) 18px; }
+  .article-list time { display: none; }
 }
 </style>

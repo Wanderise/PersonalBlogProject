@@ -10,31 +10,48 @@ spring:
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAudioSpeechAutoConfiguration
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAudioTranscriptionAutoConfiguration
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   datasource:
-    url: jdbc:mysql://localhost:3306/blog?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    url: ${DB_URL:jdbc:mysql://localhost:3306/blog?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
     deepseek:
+      api-key: ${DEEPSEEK_API_KEY:}
       chat:
         options:
           model: deepseek-v4-flash
     dashscope:
+      api-key: ${DASHSCOPE_API_KEY:}
       embedding:
         enabled: true
         options:
           model: text-embedding-v4
     vectorstore:
       qdrant:
-        host: localhost
-        port: 6334
-        collection-name: my-collection
+        host: ${QDRANT_HOST:localhost}
+        port: ${QDRANT_GRPC_PORT:6334}
+        collection-name: ${QDRANT_COLLECTION:my-collection}
   data:
     redis:
-      host: localhost
-      port: 6379
-      database: 0
-      password:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      password: ${REDIS_PASSWORD:}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:blog}
+    password: ${RABBITMQ_PASSWORD:change-me}
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
+          multiplier: 2
 
 
 knife4j:
@@ -43,10 +60,38 @@ knife4j:
     language: zh_cn
 
 r2:
-  bucket: blog-test
-  endpoint: https://b665f304b0fb94b0fc0977b20d94057d.r2.cloudflarestorage.com
-  region: auto
-  public-domain: http://xiyizi.top
+  bucket: ${R2_BUCKET:}
+  endpoint: ${R2_ENDPOINT:}
+  region: ${R2_REGION:auto}
+  public-domain: ${R2_PUBLIC_DOMAIN:}
+  access-key: ${R2_ACCESS_KEY:}
+  secret-key: ${R2_SECRET_KEY:}
+
+jwt:
+  secret: ${JWT_SECRET:}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  rag:
+    transport: ${RAG_TRANSPORT:rabbitmq}
+    search:
+      top-k: ${RAG_SEARCH_TOP_K:6}
+      similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.2}
+    rabbitmq:
+      concurrency: ${RAG_RABBITMQ_CONCURRENCY:2}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 mybatis-plus:
   configuration:

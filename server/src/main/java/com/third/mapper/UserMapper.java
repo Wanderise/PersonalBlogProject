@@ -22,12 +22,12 @@ public interface UserMapper {
     @Select("select id, name, gmt_create, gmt_modified, password, image, level from blog.user where name = #{userName}")
     User getUserInfoByName(String userName);
 
-    @Update("update blog.user SET name = #{name}, gmt_modified = #{now} where name = #{userName}")
-    void updateUserName(@Param("userName") String userName, @Param("name") String name, @Param("now") LocalDateTime now);
+    @Update("update blog.user SET name = #{name}, gmt_modified = #{now} where id = #{userId}")
+    void updateUserName(@Param("userId") Integer userId, @Param("name") String name, @Param("now") LocalDateTime now);
 
     @Select("select id, name, gmt_create, gmt_modified, password, image, level from blog.user where id = #{userId}")
     User getUserInfoById(Integer userId);
 
-    @Update("update blog.user SET image = #{image} where name = #{name}")
+    @Update("update blog.user SET image = #{image} where id = #{id}")
     void updateUserAvatar(User user);
 }

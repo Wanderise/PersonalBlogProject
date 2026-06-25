@@ -1,28 +1,31 @@
-/* === Design System — Indigo Studio === */
+/* === Design System: quiet editorial workspace === */
 :root {
-  --c-primary: #7c3aed;
-  --c-primary-light: #f5f3ff;
-  --c-primary-dark: #6d28d9;
-  --c-primary-glow: rgba(124, 58, 237, 0.15);
-  --c-bg: #faf9fb;
+  --c-primary: #167a69;
+  --c-primary-light: #eaf5f1;
+  --c-primary-dark: #0f5f53;
+  --c-primary-glow: rgba(22, 122, 105, 0.16);
+  --c-accent: #d6674f;
+  --c-accent-light: #fff0eb;
+  --c-bg: #f3f5f2;
   --c-surface: #ffffff;
-  --c-text: #18181b;
-  --c-text-secondary: #52525b;
-  --c-text-muted: #a1a1aa;
-  --c-border: #e4e4e7;
-  --c-border-light: #f4f4f5;
-  --c-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --c-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
-  --c-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-  --radius-sm: 8px;
-  --radius: 14px;
-  --radius-lg: 18px;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --c-surface-soft: #f8faf8;
+  --c-text: #17211f;
+  --c-text-secondary: #54625f;
+  --c-text-muted: #8a9793;
+  --c-border: #dfe5e1;
+  --c-border-light: #edf1ee;
+  --c-shadow: 0 1px 2px rgba(23, 33, 31, 0.05);
+  --c-shadow-md: 0 8px 24px rgba(23, 33, 31, 0.08);
+  --c-shadow-lg: 0 18px 44px rgba(23, 33, 31, 0.12);
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 8px;
+  --font: Inter, "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --transition: 0.2s ease;
 }
 
 /* === Base === */
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin: 0; padding: 0; box-sizing: border-box; letter-spacing: 0 !important; }
 
 html { font-size: 16px; }
 
@@ -33,6 +36,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
+  overflow-x: hidden;
 }
 
 #app { min-height: 100vh; }
@@ -48,7 +52,7 @@ a { color: var(--c-primary); text-decoration: none; }
   --el-button-active-bg-color: var(--c-primary-dark);
   border-radius: var(--radius-sm);
   font-weight: 500;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   transition: all var(--transition);
 }
 
@@ -87,6 +91,15 @@ a { color: var(--c-primary); text-decoration: none; }
   background: var(--c-surface);
 }
 
+.el-dialog {
+  border-radius: var(--radius);
+  box-shadow: var(--c-shadow-lg);
+}
+
+.el-textarea__inner {
+  border-radius: var(--radius-sm);
+}
+
 .el-tag {
   border-radius: 6px;
   font-weight: 500;
@@ -111,6 +124,8 @@ a { color: var(--c-primary); text-decoration: none; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+
+::selection { background: #cce9df; color: var(--c-text); }
 
 /* === Page Transition === */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }

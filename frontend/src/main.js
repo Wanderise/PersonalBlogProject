@@ -2,12 +2,6 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import './styles/global.css'
 
-// ElementPlus
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
-
-
 // markdown editor
 import VueMarkdownEditor from '@kangc/v-md-editor';
 import '@kangc/v-md-editor/lib/style/base-editor.css';
@@ -25,10 +19,6 @@ VueMarkdownEditor.use(vuepressTheme, {
 
 
 const app = createApp(App)
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-    app.component(key, component)
-}
-app.use(ElementPlus)
 app.use(VueMarkdownEditor);
 app.use(router);
 app.mount('#app')

@@ -1,8 +1,10 @@
 import axios from 'axios'
 import { useAuth } from '@/composables/useAuth.js'
 
+export const API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:8080').replace(/\/$/, '')
+
 const service = axios.create({
-  baseURL: 'http://localhost:8080/',
+  baseURL: API_BASE,
   timeout: 5000
 })
 
@@ -26,9 +28,9 @@ service.interceptors.response.use(
     if (error.response) {
       const { status } = error.response
       if (status === 401) {
-        // 只有登录接口的401才说明凭证失效，其他接口401是权限问题（如KB不属当前用户）
-        const isAuthEndpoint = error.config.url?.includes('/user/login')
-        if (isAuthEndpoint) {
+        // 登录接口的 401 是凭证错误；其他接口的 401 表示当前登录态已失效。
+        const isLoginRequest = error.config.url?.includes('/user/login')
+        if (!isLoginRequest) {
           const { clearAuth } = useAuth()
           clearAuth()
           window.location.href = '/login'

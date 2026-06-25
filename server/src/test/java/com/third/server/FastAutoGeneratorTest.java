@@ -18,7 +18,12 @@ public class FastAutoGeneratorTest {
         String serverModulePath = projectPath + "/server/src/main/java";
         String mapperXmlPath = projectPath + "/server/src/main/resources/mapper";
 
-        FastAutoGenerator.create("jdbc:mysql://localhost:3306/blog?serverTimezone=GMT%2B8", "root", "1234")
+        String databaseUrl = System.getenv().getOrDefault(
+                "DB_URL", "jdbc:mysql://localhost:3306/blog?serverTimezone=GMT%2B8");
+        String databaseUser = System.getenv().getOrDefault("DB_USERNAME", "root");
+        String databasePassword = System.getenv().getOrDefault("DB_PASSWORD", "");
+
+        FastAutoGenerator.create(databaseUrl, databaseUser, databasePassword)
                 .globalConfig(builder -> {
                     builder.author("bsgm")
                             .enableSwagger()

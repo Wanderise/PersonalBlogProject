@@ -19,6 +19,12 @@
       @refresh-kbs="loadKbs"
       ref="sidebarRef"
     />
+    <button
+      v-if="sidebarOpen"
+      class="sidebar-scrim"
+      aria-label="关闭侧栏"
+      @click="sidebarOpen = false"
+    ></button>
 
     <AiChatView
       v-if="activeConv"
@@ -36,15 +42,21 @@
 
     <div v-else class="ai-empty">
       <div class="empty-content">
-        <div class="welcome-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2a4 4 0 0 1 4 4v.5a4 4 0 0 1-2.5 3.7c-1.2.5-2.5.5-3.7 0A4 4 0 0 1 8 6.5V6a4 4 0 0 1 4-4z"/>
-            <path d="M8 14a4 4 0 0 0-4 4v2h16v-2a4 4 0 0 0-4-4H8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
+        <button class="mobile-sidebar-trigger" aria-label="打开侧栏" @click="sidebarOpen = true">
+          <el-icon><Menu /></el-icon>
+        </button>
+        <div class="empty-kicker"><el-icon><MagicStick /></el-icon> AI 写作工作台</div>
+        <h1>从一个问题开始</h1>
+        <p class="empty-lead">选择助手和知识库，让散落的文章、资料与想法在同一处发生联系。</p>
+        <button class="start-button" @click="handleNew">
+          <el-icon><ChatDotRound /></el-icon>
+          创建新对话
+        </button>
+        <div class="workspace-status">
+          <div><strong>{{ agents.length }}</strong><span>可用助手</span></div>
+          <div><strong>{{ kbs.length }}</strong><span>知识库</span></div>
+          <div><strong>{{ conversations.length }}</strong><span>历史对话</span></div>
         </div>
-        <h3>选择或创建一个对话开始</h3>
-        <p>点击左侧「开始对话」或选择历史记录</p>
       </div>
     </div>
   </div>
@@ -53,6 +65,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ChatDotRound, MagicStick, Menu } from '@element-plus/icons-vue'
 import AiSidebar from './AiSidebar.vue'
 import AiChatView from './AiChatView.vue'
 import {
@@ -60,7 +73,7 @@ import {
   getMessages, streamChat, getAgents, getKnowledgeBases
 } from '@/api/ai.js'
 
-const sidebarOpen = ref(true)
+const sidebarOpen = ref(window.innerWidth > 860)
 const activeConvId = ref(null)
 const agents = ref([])
 const selectedAgent = ref(null)
@@ -101,6 +114,8 @@ async function loadKbs() {
   try {
     const res = await getKnowledgeBases()
     kbs.value = res.data || []
+    const validIds = new Set(kbs.value.map(kb => kb.id))
+    selectedKbIds.value = selectedKbIds.value.filter(id => validIds.has(id))
     if (sidebarRef.value) sidebarRef.value.refreshKbs(kbs.value)
   } catch { /* ignore */ }
 }
@@ -112,6 +127,7 @@ async function handleNew() {
     conversations.value.unshift(conv)
     activeConvId.value = conv.id
     messages.value = []
+    if (window.innerWidth <= 860) sidebarOpen.value = false
   } catch {
     ElMessage.error('创建对话失败')
   }
@@ -126,6 +142,7 @@ async function handleSelect(id) {
       role: m.role === 'user' ? 'user' : 'assistant',
       content: m.content
     }))
+    if (window.innerWidth <= 860) sidebarOpen.value = false
   } catch { /* ignore */ }
 }
 
@@ -224,8 +241,10 @@ async function handleSend({ text, attachments }) {
 <style scoped>
 .ai-page {
   display: flex;
-  height: calc(100vh - 58px);
+  height: calc(100vh - 64px);
   overflow: hidden;
+  position: relative;
+  background: var(--c-bg);
 }
 
 .ai-empty {
@@ -233,34 +252,97 @@ async function handleSend({ text, attachments }) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--c-surface);
+  background: var(--c-surface-soft);
+  position: relative;
 }
 
-.empty-content { text-align: center; }
+.empty-content {
+  width: min(620px, calc(100% - 40px));
+  text-align: left;
+}
 
-.welcome-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  background: var(--c-primary-light);
-  color: var(--c-primary);
+.empty-kicker {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 7px;
+  color: var(--c-primary);
+  font-size: 13px;
+  font-weight: 700;
   margin-bottom: 20px;
 }
 
-.welcome-icon svg { width: 36px; height: 36px; }
-
-.empty-content h3 {
-  font-size: 22px;
-  font-weight: 700;
+.empty-content h1 {
+  font-family: Georgia, "Microsoft YaHei", serif;
+  font-size: 42px;
+  line-height: 1.2;
+  font-weight: 600;
   color: var(--c-text);
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 
-.empty-content p {
-  font-size: 15px;
-  color: var(--c-text-muted);
+.empty-lead {
+  max-width: 520px;
+  font-size: 16px;
+  color: var(--c-text-secondary);
+  margin-bottom: 28px;
+}
+
+.start-button {
+  height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--c-primary);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition);
+}
+
+.start-button:hover { background: var(--c-primary-dark); transform: translateY(-1px); }
+
+.workspace-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 480px;
+  margin-top: 52px;
+  padding-top: 20px;
+  border-top: 1px solid var(--c-border);
+}
+
+.workspace-status div { display: flex; flex-direction: column; gap: 2px; }
+.workspace-status strong { font-size: 20px; color: var(--c-text); }
+.workspace-status span { font-size: 12px; color: var(--c-text-muted); }
+
+.sidebar-scrim,
+.mobile-sidebar-trigger { display: none; }
+
+@media (max-width: 860px) {
+  .ai-page { height: calc(100vh - 58px); }
+  .sidebar-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 39;
+    border: 0;
+    background: rgba(23, 33, 31, 0.32);
+  }
+  .mobile-sidebar-trigger {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 28px;
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--c-text-secondary);
+  }
+  .empty-content h1 { font-size: 32px; }
+  .workspace-status { margin-top: 40px; }
 }
 </style>

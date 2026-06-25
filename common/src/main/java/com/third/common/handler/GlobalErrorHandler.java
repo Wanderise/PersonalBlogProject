@@ -23,7 +23,7 @@ public class GlobalErrorHandler {
     @ExceptionHandler(value = BaseExcpetion.class)
     public ResponseEntity<Result> handleException(BaseExcpetion e) {
       log.error("错误信息：{}", e.getMessage());
-      return ResponseEntity.status(e.getCode()).body(Result.error(e.getMessage()));
+      return ResponseEntity.status(e.getCode()).body(Result.error(e.getCode(), e.getMessage()));
     }
     // 兜底处理未预期的运行时异常，统一返回500
     @ExceptionHandler(value = Exception.class)

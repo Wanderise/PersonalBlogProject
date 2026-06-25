@@ -9,9 +9,9 @@ public interface UserService {
 
     UserLoginVO login(UserDTO user);
 
-    UserVO userInfo();
+    UserVO userInfo(Integer userId);
 
-    UserVO updateUserInfo(UserDTO userDTO);
+    UserVO updateUserInfo(UserDTO userDTO, Integer userId);
 
-    void updateUserAvatar(UserDTO userDTO);
+    void updateUserAvatar(UserDTO userDTO, Integer userId);
 }

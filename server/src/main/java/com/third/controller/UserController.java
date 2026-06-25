@@ -1,5 +1,6 @@
 package com.third.controller;
 
+import com.third.common.context.UserContext;
 import com.third.common.result.Result;
 import com.third.pojo.dto.UserDTO;
 import com.third.pojo.vo.UserLoginVO;
@@ -36,22 +37,25 @@ public class UserController {
     @GetMapping("/info")
     @Operation(summary = "获取用户信息")
     public Result<UserVO> userInfo() {
-        UserVO userVO = userService.userInfo();
+        Integer userId = UserContext.getUserId();
+        UserVO userVO = userService.userInfo(userId);
         return Result.success(userVO);
     }
 
     @PutMapping("/info")
     @Operation(summary = "更新用户信息")
     public Result<UserVO> updateUserInfo(@RequestBody UserDTO userDTO) {
+        Integer userId = UserContext.getUserId();
         log.info("userDTO={}", userDTO);
-        UserVO userVO = userService.updateUserInfo(userDTO);
+        UserVO userVO = userService.updateUserInfo(userDTO, userId);
         return Result.success(userVO);
     }
 
     @PutMapping("/avatar")
     public Result updateUserAvatar(@RequestBody UserDTO userDTO) {
+        Integer userId = UserContext.getUserId();
         log.info("userDTO={}", userDTO);
-        userService.updateUserAvatar(userDTO);
+        userService.updateUserAvatar(userDTO, userId);
         return Result.success();
     }
 

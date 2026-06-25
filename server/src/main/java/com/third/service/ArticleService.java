@@ -9,31 +9,23 @@ import com.third.pojo.vo.ArticleVersionVO;
 
 import java.util.List;
 
-/**
- * <p>
- * 文章 服务类
- * </p>
- *
- * @author bsgm
- * @since 2026-04-15
- */
 public interface ArticleService extends IService<Article> {
 
-    ArticleVO addArticle(ArticleAddDTO article);
+    ArticleVO addArticle(ArticleAddDTO article, Integer userId);
 
     ArticleVO getArticleById(Integer id);
 
     ArticleListVO getArticleList(int page, int size, String tag, String keyword);
 
-    void deleteArticle(Integer id);
+    void deleteArticle(Integer id, Integer userId);
 
-    void updateArticleById(Integer id, ArticleAddDTO articleAddDTO);
+    void updateArticleById(Integer id, ArticleAddDTO articleAddDTO, Integer userId);
 
-    ArticleListVO getMyArticleList(int page, int size);
+    ArticleListVO getMyArticleList(int page, int size, Integer userId);
 
-    List<ArticleVersionVO> getVersions(Integer id);
+    List<ArticleVersionVO> getVersions(Integer id, Integer userId);
 
-    ArticleVersionVO rollbackVersion(Integer id, Integer versionId);
+    ArticleVersionVO rollbackVersion(Integer id, Integer versionId, Integer userId);
 
-    ArticleVersionVO getVersion(Integer id, Integer versionId);
+    ArticleVersionVO getVersion(Integer id, Integer versionId, Integer userId);
 }

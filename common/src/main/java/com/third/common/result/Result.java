@@ -32,8 +32,12 @@ public class Result<E> {
     }
 
     public static <E> Result error(String msg){
-        Result r = new Result();
-        r.code = 400;
+        return error(400, msg);
+    }
+
+    public static <E> Result<E> error(int code, String msg){
+        Result<E> r = new Result<>();
+        r.code = code;
         r.msg = msg;
         return r;
     }

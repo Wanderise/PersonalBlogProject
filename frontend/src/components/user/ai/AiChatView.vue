@@ -1,49 +1,80 @@
 <template>
   <div class="chat-view">
     <div class="chat-topbar" v-if="title">
-      <el-icon class="topbar-toggle" @click="$emit('toggle-sidebar')"><Expand /></el-icon>
-      <span class="topbar-title">{{ title }}</span>
+      <el-button class="topbar-toggle" text circle aria-label="切换侧栏" @click="$emit('toggle-sidebar')">
+        <el-icon><Expand /></el-icon>
+      </el-button>
+      <div class="topbar-copy">
+        <span class="topbar-label">当前对话</span>
+        <span class="topbar-title">{{ title }}</span>
+      </div>
+      <div class="topbar-context" :class="{ active: selectedKbIds.length }">
+        <el-icon><Collection /></el-icon>
+        {{ selectedKbIds.length ? `${selectedKbIds.length} 个知识库` : '未启用知识库' }}
+      </div>
     </div>
 
     <div class="chat-messages" ref="msgContainer">
       <div v-if="!messages.length && !streaming" class="chat-welcome">
         <div class="welcome-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2a4 4 0 0 1 4 4v.5a4 4 0 0 1-2.5 3.7c-1.2.5-2.5.5-3.7 0A4 4 0 0 1 8 6.5V6a4 4 0 0 1 4-4z"/>
-            <path d="M8 14a4 4 0 0 0-4 4v2h16v-2a4 4 0 0 0-4-4H8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
+          <el-icon><MagicStick /></el-icon>
         </div>
         <h3>{{ agentGreeting }}</h3>
-        <p>开始一段新的对话吧，可以附带文章或文件作为上下文</p>
+        <p>把正在思考的问题交给我，或者从下面选一个开始。</p>
+        <div class="prompt-list">
+          <button @click="applyPrompt('帮我梳理最近文章中的核心观点')">梳理文章观点</button>
+          <button @click="applyPrompt('根据知识库内容，为我生成一份学习计划')">生成学习计划</button>
+          <button @click="applyPrompt('检查我的内容结构，并给出改进建议')">改进内容结构</button>
+        </div>
       </div>
 
-      <div
-        v-for="(msg, i) in messages"
-        :key="i"
-        class="chat-msg"
-        :class="{ user: msg.role === 'user', assistant: msg.role === 'assistant' }"
-      >
-        <div class="msg-avatar">
-          <span v-if="msg.role === 'user'" class="avatar-text">你</span>
-          <span v-else class="avatar-text ai">AI</span>
-        </div>
-        <div class="msg-bubble">
-          <div class="markdown-body" v-html="renderMarkdown(msg.content)" />
-          <div v-if="msg.attachments?.length" class="msg-attach-tags">
-            <span v-for="(att, j) in msg.attachments" :key="j" class="msg-attach-tag clickable"
-              @click="openAttachment(att)" :title="att.type==='article'?'查看文章':'查看文件'">
-              <el-icon v-if="att.type === 'article'"><Document /></el-icon>
-              <el-icon v-else-if="fileIcon(att.name) === 'pdf'" color="#ef4444"><Document /></el-icon>
-              <el-icon v-else-if="fileIcon(att.name) === 'docx'" color="#3b82f6"><Document /></el-icon>
-              <el-icon v-else-if="fileIcon(att.name) === 'txt'" color="#22c55e"><Tickets /></el-icon>
-              <el-icon v-else-if="fileIcon(att.name) === 'md'" color="#8b5cf6"><Notebook /></el-icon>
-              <el-icon v-else><FolderOpened /></el-icon>
-              {{ att.name }}
-            </span>
+      <template v-for="(rawMsg, i) in messages" :key="i">
+        <div
+          class="chat-msg"
+          :class="{ user: rawMsg.role === 'user', assistant: rawMsg.role === 'assistant' }"
+        >
+          <div class="msg-avatar">
+            <span v-if="rawMsg.role === 'user'" class="avatar-text">你</span>
+            <span v-else class="avatar-text ai">AI</span>
           </div>
+          <template v-for="msg in [enrichMessage(rawMsg)]" :key="i + '-e'">
+            <div class="msg-bubble">
+              <div v-if="msg.attachments?.length && isFileOnlyMessage(msg)" class="file-preview-cards">
+                <div v-for="(att, j) in msg.attachments" :key="j" class="file-preview-card"
+                  @click="openAttachment(att)" :title="att.type==='article'?'查看文章':'预览文件'">
+                  <div class="file-preview-icon" :class="'ext-' + fileIcon(att.name)">
+                    <el-icon v-if="att.type === 'article'" :size="28"><Document /></el-icon>
+                    <el-icon v-else-if="fileIcon(att.name) === 'pdf'" :size="28"><Document /></el-icon>
+                    <el-icon v-else-if="fileIcon(att.name) === 'docx'" :size="28"><Document /></el-icon>
+                    <el-icon v-else-if="fileIcon(att.name) === 'txt'" :size="28"><Tickets /></el-icon>
+                    <el-icon v-else-if="fileIcon(att.name) === 'md'" :size="28"><Notebook /></el-icon>
+                    <el-icon v-else :size="28"><FolderOpened /></el-icon>
+                  </div>
+                  <div class="file-preview-info">
+                    <span class="file-preview-name">{{ att.name }}</span>
+                    <span class="file-preview-action">
+                      {{ msg._parsedAttach ? '重新上传后可预览' : (att.type === 'article' ? '点击查看文章' : '点击预览文件') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="markdown-body" v-html="renderMarkdown(msg.content)" />
+              <div v-if="msg.attachments?.length && !isFileOnlyMessage(msg)" class="msg-attach-tags">
+                <span v-for="(att, j) in msg.attachments" :key="j" class="msg-attach-tag clickable"
+                  @click="openAttachment(att)" :title="att.type==='article'?'查看文章':'查看文件'">
+                  <el-icon v-if="att.type === 'article'"><Document /></el-icon>
+                  <el-icon v-else-if="fileIcon(att.name) === 'pdf'" color="#ef4444"><Document /></el-icon>
+                  <el-icon v-else-if="fileIcon(att.name) === 'docx'" color="#3b82f6"><Document /></el-icon>
+                  <el-icon v-else-if="fileIcon(att.name) === 'txt'" color="#22c55e"><Tickets /></el-icon>
+                  <el-icon v-else-if="fileIcon(att.name) === 'md'" color="#d6674f"><Notebook /></el-icon>
+                  <el-icon v-else><FolderOpened /></el-icon>
+                  {{ att.name }}
+                </span>
+              </div>
+            </div>
+          </template>
         </div>
-      </div>
+      </template>
 
       <div v-if="streaming" class="chat-msg assistant">
         <div class="msg-avatar"><span class="avatar-text ai">AI</span></div>
@@ -105,7 +136,7 @@
           ref="inputRef"
           v-model="inputText"
           class="chat-textarea"
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+          placeholder="写下你的问题..."
           rows="1"
           @keydown.enter.exact.prevent="handleEnter"
           @input="autoResize"
@@ -129,7 +160,7 @@
         <span class="upload-progress-text">{{ uploadProgress >= 100 ? '上传完成' : '上传中...' }}</span>
       </div>
 
-      <p class="input-hint">AI 回答可能存在错误，请注意甄别。可附带文章/文件作为上下文</p>
+      <p class="input-hint">内容由 AI 生成，请结合实际情况判断。</p>
 
       <input
         ref="fileInputRef"
@@ -182,10 +213,11 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Expand, Promotion, CirclePlus, Document, FolderOpened, CircleClose, Search } from '@element-plus/icons-vue'
+import { Expand, Promotion, CirclePlus, Document, FolderOpened, CircleClose, Search, Collection, MagicStick } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { getMyArticles } from '@/api/article.js'
-import { uploadRagFiles, submitRagArticles } from '@/api/ai.js'
+import { uploadRagFiles, submitRagArticles, getKnowledgeBaseDocuments } from '@/api/ai.js'
+import { API_BASE } from '@/api/request.js'
 
 const router = useRouter()
 
@@ -199,12 +231,41 @@ function fileIcon(name) {
   return ext
 }
 
+const FILE_ONLY_RE = /^检索知识库(.+)文件$/
+
+function parseAttachments(content) {
+  if (!content) return null
+  const m = content.match(FILE_ONLY_RE)
+  if (!m) return null
+  return m[1].split('、').filter(Boolean).map(name => {
+    if (name.startsWith('【文章】')) {
+      return { type: 'article', name: name.slice(4) }
+    }
+    return { type: 'file', name }
+  })
+}
+
+function enrichMessage(msg) {
+  if (msg.attachments?.length) return msg
+  const parsed = parseAttachments(msg.content)
+  if (!parsed) return msg
+  const displayContent = msg.content.replace(FILE_ONLY_RE, '已发送 $1').trim()
+  return { ...msg, content: displayContent, attachments: parsed, _parsedAttach: true }
+}
+
+function isFileOnlyMessage(msg) {
+  if (!msg.attachments?.length) return false
+  if (msg._parsedAttach) return true
+  if (!msg.content || !msg.content.trim()) return true
+  return FILE_ONLY_RE.test(msg.content.trim())
+}
+
 const props = defineProps({
   messages: { type: Array, default: () => [] },
   streaming: { type: Boolean, default: false },
   streamContent: { type: String, default: '' },
   title: { type: String, default: '' },
-  agent: { type: String, default: 'general' },
+  agent: { type: [String, Number], default: 'general' },
   selectedKbIds: { type: Array, default: () => [] }
 })
 
@@ -256,6 +317,14 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 160) + 'px'
 }
 
+function applyPrompt(prompt) {
+  inputText.value = prompt
+  nextTick(() => {
+    autoResize()
+    inputRef.value?.focus()
+  })
+}
+
 function scrollBottom() {
   nextTick(() => {
     scrollAnchor.value?.scrollIntoView({ behavior: 'smooth' })
@@ -269,12 +338,14 @@ async function handleEnter() {
   // 发送时先上传待发送文件和文章
   const hasPending = pendingFiles.value.length > 0 || pendingArticles.value.length > 0
   if (hasPending) {
+    const initialAttachmentCount = attachments.value.length
     uploading.value = true
     uploadProgress.value = 0
     progressTimer = setInterval(() => {
       if (uploadProgress.value < 90) uploadProgress.value += 5
     }, 100)
     const kbId = props.selectedKbIds?.length ? props.selectedKbIds[0] : null
+    const processingIds = []
     try {
       if (kbId) {
         // 上传文件
@@ -286,6 +357,7 @@ async function handleEnter() {
           const docs = body.data || []
           for (const doc of docs) {
             attachments.value.push({ type: 'file', name: doc.title, r2Key: doc.r2Key, id: doc.id })
+            if (doc.id && doc.status !== 'READY') processingIds.push(doc.id)
           }
         }
         // 上传文章
@@ -293,7 +365,11 @@ async function handleEnter() {
           const articleIds = pendingArticles.value.map(a => a.id)
           const artRes = await submitRagArticles(articleIds, kbId)
           if (artRes.code !== 200) throw new Error(artRes.msg || 'Upload failed')
+          for (const doc of (artRes.data || [])) {
+            if (doc.id && doc.status !== 'READY') processingIds.push(doc.id)
+          }
         }
+        if (processingIds.length) await waitForRagReady(kbId, processingIds)
         emit('kb-refresh')
       } else {
         for (const file of pendingFiles.value) {
@@ -306,8 +382,14 @@ async function handleEnter() {
           attachments.value.push(art)
         }
       }
-    } catch {
-      ElMessage.error('上传失败')
+    } catch (error) {
+      clearInterval(progressTimer)
+      uploading.value = false
+      uploadProgress.value = 0
+      attachments.value.splice(initialAttachmentCount)
+      emit('kb-refresh')
+      ElMessage.error(error.message || '上传失败')
+      return
     }
     clearInterval(progressTimer)
     uploadProgress.value = 100
@@ -316,10 +398,13 @@ async function handleEnter() {
     setTimeout(() => { uploading.value = false; uploadProgress.value = 0 }, 500)
   }
 
-  // 允许只发文件不发文本
+  // 允许只发文件不发文本，自动用"检索知识库xxx文件"格式填充以便检索
   if (!text && !attachments.value.length) return
+  const finalText = text || ('检索知识库' + attachments.value.map(a => {
+    return (a.type === 'article' ? '【文章】' : '') + a.name
+  }).join('、') + '文件')
 
-  emit('send', { text, attachments: [...attachments.value] })
+  emit('send', { text: finalText, attachments: [...attachments.value] })
   inputText.value = ''
   attachments.value = []
   pendingFiles.value = []
@@ -332,6 +417,21 @@ function send() {
   handleEnter()
 }
 
+async function waitForRagReady(kbId, documentIds) {
+  const pending = new Set(documentIds)
+  for (let attempt = 0; attempt < 60 && pending.size; attempt++) {
+    const response = await getKnowledgeBaseDocuments(kbId)
+    const documents = response.data || []
+    for (const document of documents) {
+      if (!pending.has(document.id)) continue
+      if (document.status === 'FAILED') throw new Error(`文档处理失败：${document.title}`)
+      if (document.status === 'READY') pending.delete(document.id)
+    }
+    if (pending.size) await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  if (pending.size) throw new Error('文档处理超时，请稍后重试')
+}
+
 function removeAttachment(i) {
   attachments.value.splice(i, 1)
 }
@@ -341,7 +441,7 @@ async function openAttachment(att) {
     router.push(`/article/${att.id}`)
   } else if (att.r2Key) {
     try {
-      const BASE = 'http://localhost:8080'
+      const BASE = API_BASE
       const res = await fetch(`${BASE}/file/download/url?objectKey=${encodeURIComponent(att.r2Key)}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
       })
@@ -454,23 +554,26 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--c-surface);
+  background: var(--c-surface-soft);
 }
 
 .chat-topbar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 20px;
+  min-height: 62px;
+  padding: 9px 22px;
   border-bottom: 1px solid var(--c-border);
-  background: var(--c-surface);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
 }
 
 .topbar-toggle {
-  cursor: pointer;
   color: var(--c-text-muted);
-  font-size: 18px;
 }
+
+.topbar-copy { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.topbar-label { font-size: 10px; font-weight: 700; color: var(--c-text-muted); }
 
 .topbar-title {
   font-size: 15px;
@@ -481,55 +584,90 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   text-overflow: ellipsis;
 }
 
+.topbar-context {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  color: var(--c-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.topbar-context.active { color: var(--c-primary); background: var(--c-primary-light); border-color: #c7e2d9; }
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 20px;
+  padding: 34px 24px;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
 .chat-welcome {
-  text-align: center;
-  padding: 60px 20px;
+  width: min(620px, 100%);
+  text-align: left;
+  padding: 44px 20px;
   margin: auto;
 }
 
 .welcome-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  background: var(--c-primary-light);
-  color: var(--c-primary);
+  width: 42px;
+  height: 42px;
+  border-radius: 7px;
+  background: var(--c-accent-light);
+  color: var(--c-accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  font-size: 21px;
 }
 
-.welcome-icon svg { width: 32px; height: 32px; }
-
 .chat-welcome h3 {
-  font-size: 20px;
-  font-weight: 700;
+  font-family: Georgia, "Microsoft YaHei", serif;
+  font-size: 28px;
+  font-weight: 600;
   color: var(--c-text);
   margin-bottom: 6px;
 }
 
 .chat-welcome p {
   font-size: 14px;
-  color: var(--c-text-muted);
+  color: var(--c-text-secondary);
+  margin-bottom: 24px;
 }
+
+.prompt-list { display: grid; gap: 8px; }
+.prompt-list button {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--c-text-secondary);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+}
+.prompt-list button:hover { border-color: #afd5ca; color: var(--c-primary); background: var(--c-primary-light); }
 
 .chat-msg {
   display: flex;
   gap: 12px;
-  max-width: 85%;
+  width: min(100%, 900px);
+  max-width: none;
+  margin: 0 auto;
 }
 
 .chat-msg.user {
-  align-self: flex-end;
+  justify-content: flex-start;
   flex-direction: row-reverse;
 }
 
@@ -553,20 +691,22 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 }
 
 .avatar-text.ai {
-  background: linear-gradient(135deg, #7c3aed, #a78bfa);
+  background: var(--c-accent);
   color: #fff;
 }
 
 .msg-bubble {
   padding: 12px 16px;
-  border-radius: 16px;
+  border-radius: 8px;
   font-size: 14px;
   line-height: 1.7;
   min-width: 0;
+  max-width: min(78%, 720px);
 }
 
 .chat-msg.assistant .msg-bubble {
-  background: #f5f4f8;
+  background: #fff;
+  border: 1px solid var(--c-border-light);
   color: var(--c-text);
   border-bottom-left-radius: 6px;
 }
@@ -578,7 +718,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 }
 
 .msg-bubble.streaming {
-  background: #f5f4f8;
+  background: #fff;
   border-bottom-left-radius: 6px;
 }
 
@@ -613,7 +753,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .msg-bubble :deep(pre code) { background: none; padding: 0; font-size: 13px; }
 
 .msg-bubble :deep(code) {
-  background: rgba(124, 58, 237, 0.08);
+  background: rgba(22, 122, 105, 0.08);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
@@ -632,9 +772,9 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 }
 
 .chat-input-area {
-  padding: 16px 20px 12px;
+  padding: 14px 22px 10px;
   border-top: 1px solid var(--c-border);
-  background: var(--c-surface);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .input-wrapper {
@@ -643,8 +783,11 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   gap: 8px;
   padding: 8px 12px;
   border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: #fafafc;
+  max-width: 900px;
+  min-height: 48px;
+  margin: 0 auto;
+  border-radius: 8px;
+  background: #fff;
   transition: border-color 0.2s;
 }
 
@@ -706,6 +849,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   flex-wrap: wrap;
   gap: 6px;
   padding: 0 0 10px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 .attach-chip {
@@ -718,7 +863,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   color: var(--c-primary);
   font-size: 12px;
   font-weight: 500;
-  border: 1px solid rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(22, 122, 105, 0.15);
 }
 
 .attach-chip .chip-name {
@@ -751,6 +896,105 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   border-radius: 3px;
 }
 
+/* ========== 文件预览卡片（仅文件消息） ========== */
+
+.file-preview-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(22, 122, 105, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.file-preview-card:hover {
+  background: rgba(22, 122, 105, 0.06);
+  border-color: rgba(22, 122, 105, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 122, 105, 0.1);
+}
+
+.file-preview-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.file-preview-icon.ext-pdf {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.file-preview-icon.ext-docx,
+.file-preview-icon.ext-doc {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.file-preview-icon.ext-txt {
+  background: #f0fdf4;
+  color: #22c55e;
+}
+
+.file-preview-icon.ext-md {
+  background: #f5f3ff;
+  color: var(--c-accent);
+}
+
+.file-preview-icon:not(.ext-pdf):not(.ext-docx):not(.ext-doc):not(.ext-txt):not(.ext-md) {
+  background: #f5f4f8;
+  color: var(--c-text-muted);
+}
+
+.file-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.file-preview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-preview-action {
+  font-size: 12px;
+  color: var(--c-primary);
+  font-weight: 500;
+}
+
+.chat-msg.user .file-preview-card {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.chat-msg.user .file-preview-card:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.chat-msg.user .file-preview-name { color: #fff; }
+.chat-msg.user .file-preview-action { color: rgba(255, 255, 255, 0.85); }
+.chat-msg.user .file-preview-icon { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
 /* ========== 消息内附件标签 ========== */
 
 .msg-attach-tags {
@@ -759,7 +1003,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   gap: 4px;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(124, 58, 237, 0.12);
+  border-top: 1px solid rgba(22, 122, 105, 0.12);
 }
 
 .msg-attach-tag {
@@ -769,7 +1013,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   padding: 2px 8px;
   border-radius: 6px;
   font-size: 11px;
-  background: rgba(124, 58, 237, 0.08);
+  background: rgba(22, 122, 105, 0.08);
   color: var(--c-primary);
 }
 
@@ -779,7 +1023,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 }
 
 .msg-attach-tag.clickable:hover {
-  background: rgba(124, 58, 237, 0.2);
+  background: rgba(22, 122, 105, 0.18);
   transform: translateY(-1px);
 }
 
@@ -807,7 +1051,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 
 .article-item.checked {
   background: var(--c-primary-light);
-  border-color: rgba(124, 58, 237, 0.2);
+  border-color: rgba(22, 122, 105, 0.2);
 }
 
 .article-item .article-title {
@@ -838,7 +1082,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   text-align: center;
   font-size: 11px;
   color: var(--c-text-muted);
-  margin: 8px 0 0;
+  max-width: 900px;
+  margin: 7px auto 0;
 }
 
 /* ========== 上传进度条 ========== */
@@ -850,13 +1095,30 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   border-radius: 11px;
   margin: 8px 0 0;
   overflow: hidden;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .upload-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  background: var(--c-primary);
   border-radius: 11px;
   transition: width 0.3s ease;
+}
+
+@media (max-width: 640px) {
+  .chat-topbar { min-height: 56px; padding: 7px 10px; }
+  .topbar-label { display: none; }
+  .topbar-context { padding: 4px 7px; }
+  .chat-messages { padding: 22px 12px; gap: 16px; }
+  .chat-welcome { padding: 24px 6px; }
+  .chat-welcome h3 { font-size: 23px; }
+  .chat-msg { gap: 7px; }
+  .msg-avatar, .avatar-text { width: 28px; height: 28px; }
+  .msg-bubble { max-width: calc(100% - 38px); padding: 10px 12px; }
+  .chat-input-area { padding: 10px 10px 7px; }
+  .input-hint { display: none; }
 }
 
 .upload-progress-text {

@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth.js'
+import { House, Compass, Document, MagicStick } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const { state, loadAvatar, clearAuth } = useAuth()
@@ -22,19 +23,19 @@ function handleLogout() {
   <header class="global-header">
     <div class="header-inner">
       <router-link to="/" class="site-name">
-        <span class="site-dot"></span>
-        个人博客
+        <span class="site-mark">博</span>
+        <span class="site-copy">
+          <strong>个人博客</strong>
+          <small>WRITE & THINK</small>
+        </span>
       </router-link>
 
       <nav class="header-nav" v-if="state.isLoggedIn">
-        <router-link to="/User/1/home">首页</router-link>
-        <router-link to="/User/1/list">发现</router-link>
-        <router-link to="/User/1/articles">我的文章</router-link>
+        <router-link to="/User/1/home"><el-icon><House /></el-icon><span>首页</span></router-link>
+        <router-link to="/User/1/list"><el-icon><Compass /></el-icon><span>发现</span></router-link>
+        <router-link to="/User/1/articles"><el-icon><Document /></el-icon><span>我的文章</span></router-link>
         <router-link to="/ai" class="ai-nav-link">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ai-nav-icon">
-            <path d="M12 2a4 4 0 0 1 3.5 2.1L12 12l3.5 7.9A4 4 0 0 1 12 22a4 4 0 0 1-3.5-2.1L12 12 8.5 4.1A4 4 0 0 1 12 2z"/>
-          </svg>
-          AI
+          <el-icon><MagicStick /></el-icon><span>AI 工作台</span>
         </router-link>
         <el-dropdown trigger="click" class="user-dropdown">
           <el-avatar
@@ -67,38 +68,45 @@ function handleLogout() {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(16px) saturate(180%);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--c-border);
 }
 
 .header-inner {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 0 28px;
-  height: 58px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .site-name {
-  font-size: 19px;
-  font-weight: 700;
   color: var(--c-text);
   text-decoration: none;
-  letter-spacing: -0.01em;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-.site-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.site-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
   background: var(--c-primary);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: Georgia, "Microsoft YaHei", serif;
+  font-size: 17px;
+  font-weight: 700;
 }
+
+.site-copy { display: flex; flex-direction: column; line-height: 1.1; }
+.site-copy strong { font-size: 15px; font-weight: 700; }
+.site-copy small { margin-top: 4px; font-size: 9px; color: var(--c-text-muted); }
 
 .header-nav {
   display: flex;
@@ -108,12 +116,15 @@ function handleLogout() {
 
 .header-nav a {
   padding: 7px 16px;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   color: var(--c-text-secondary);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
   transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .header-nav a:hover {
@@ -125,6 +136,7 @@ function handleLogout() {
   background: var(--c-primary-light);
   color: var(--c-primary);
   font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(22, 122, 105, 0.08);
 }
 
 .btn-register {
@@ -138,16 +150,7 @@ function handleLogout() {
   color: #fff !important;
 }
 
-.ai-nav-link {
-  display: flex !important;
-  align-items: center;
-  gap: 5px;
-}
-
-.ai-nav-icon {
-  width: 16px;
-  height: 16px;
-}
+.ai-nav-link { margin-left: 4px; }
 
 .user-dropdown { margin-left: 6px; }
 
@@ -158,12 +161,22 @@ function handleLogout() {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--c-primary), var(--c-primary-dark));
+  background: var(--c-accent);
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: transform var(--transition), box-shadow var(--transition);
+}
+
+@media (max-width: 760px) {
+  .header-inner { padding: 0 14px; height: 58px; }
+  .site-copy small { display: none; }
+  .header-nav { gap: 0; }
+  .header-nav a { padding: 8px 10px; }
+  .header-nav a span { display: none; }
+  .ai-nav-link { margin-left: 0; }
+  .user-dropdown { margin-left: 2px; }
 }
 
 .user-avatar:hover {

@@ -18,7 +18,7 @@
 
       <div class="sidebar-section">
         <div class="section-head">
-          <span class="section-title">Agent</span>
+          <span class="section-title">助手 <b>{{ agents.length }}</b></span>
           <el-button class="add-agent-btn" text size="small" @click="showAddAgent = true">
             <el-icon><Plus /></el-icon>
           </el-button>
@@ -43,7 +43,7 @@
 
       <div class="sidebar-section">
         <div class="section-head">
-          <span class="section-title">知识库</span>
+          <span class="section-title">知识库 <b>{{ kbs.length }}</b></span>
           <el-button class="add-agent-btn" text size="small" @click="showAddKb = true">
             <el-icon><Plus /></el-icon>
           </el-button>
@@ -91,12 +91,21 @@
                 <el-icon v-if="doc.fileType === 'pdf'" color="#ef4444"><Document /></el-icon>
                 <el-icon v-else-if="doc.fileType === 'docx' || doc.fileType === 'doc'" color="#3b82f6"><Document /></el-icon>
                 <el-icon v-else-if="doc.fileType === 'txt'" color="#22c55e"><Tickets /></el-icon>
-                <el-icon v-else-if="doc.fileType === 'md'" color="#8b5cf6"><Notebook /></el-icon>
+                <el-icon v-else-if="doc.fileType === 'md'" color="#d6674f"><Notebook /></el-icon>
                 <el-icon v-else color="#6b7280"><FolderOpened /></el-icon>
               </div>
               <div class="doc-body">
                 <span class="doc-name">{{ doc.title }}</span>
                 <span class="doc-meta">{{ doc.fileType }} · {{ formatTime(doc.gmtCreate) }}</span>
+              </div>
+              <span class="doc-status" :class="(doc.status || '').toLowerCase()">{{ statusLabel(doc.status) }}</span>
+              <div class="doc-actions">
+                <el-button v-if="doc.status === 'FAILED'" text circle size="small" title="重试" @click.stop="retryDoc(doc.id)">
+                  <el-icon><RefreshRight /></el-icon>
+                </el-button>
+                <el-button text circle size="small" title="删除" @click.stop="removeDoc(doc.id)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
               </div>
             </div>
           </div>
@@ -128,7 +137,9 @@
       </el-dialog>
 
       <div class="sidebar-section conversations">
-        <div class="section-title">对话历史</div>
+        <div class="section-head conversation-head">
+          <span class="section-title">最近对话 <b>{{ conversations.length }}</b></span>
+        </div>
         <div class="conv-list" v-if="conversations.length">
           <div
             v-for="conv in conversations"
@@ -211,8 +222,9 @@
 <script setup>
 import { ref, reactive, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, ChatDotRound, ChatLineSquare, EditPen, Delete, Plus, Setting, Document, Tickets, Notebook, FolderOpened, Reading, Loading, Link } from '@element-plus/icons-vue'
-import { createAgent, deleteAgent, getKnowledgeBases, createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBaseDocuments, deleteKnowledgeBaseDocument } from '@/api/ai.js'
+import { ArrowLeft, ChatDotRound, ChatLineSquare, EditPen, Delete, Plus, Setting, Document, Tickets, Notebook, FolderOpened, Reading, Loading, Link, RefreshRight } from '@element-plus/icons-vue'
+import { createAgent, deleteAgent, getKnowledgeBases, createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBaseDocuments, deleteKnowledgeBaseDocument, retryKnowledgeBaseDocument } from '@/api/ai.js'
+import { API_BASE } from '@/api/request.js'
 
 const props = defineProps({
   open: { type: Boolean, default: true },
@@ -234,6 +246,10 @@ function formatTime(t) {
   if (!t) return ''
   const d = new Date(t)
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function statusLabel(status) {
+  return { PROCESSING: '处理中', READY: '可用', FAILED: '失败' }[status] || status || '未知'
 }
 
 function startRename(conv) {
@@ -320,6 +336,7 @@ async function removeKb(id) {
   await ElMessageBox.confirm('删除知识库将同时删除其中的所有文档和向量数据', '警告', { type: 'warning' })
   try {
     await deleteKnowledgeBase(id)
+    emit('kbsChange', props.selectedKbIds.filter(kbId => kbId !== id))
     ElMessage.success('已删除')
     emit('refreshKbs')
   } catch {
@@ -366,7 +383,7 @@ async function selectDoc(doc) {
   previewError.value = ''
   previewContent.value = ''
   previewUrl.value = ''
-  const BASE = 'http://localhost:8080'
+  const BASE = API_BASE
   try {
     const dlRes = await fetch(`${BASE}/file/download/url?objectKey=${encodeURIComponent(doc.r2Key)}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
@@ -394,7 +411,7 @@ async function selectDoc(doc) {
 
 function openOrigin(doc) {
   if (!doc?.r2Key) return
-  const BASE = 'http://localhost:8080'
+  const BASE = API_BASE
   fetch(`${BASE}/file/download/url?objectKey=${encodeURIComponent(doc.r2Key)}`, {
     headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
   }).then(r => r.json()).then(body => {
@@ -420,6 +437,18 @@ async function removeDoc(docId) {
   }
 }
 
+async function retryDoc(docId) {
+  if (!managingKb.value) return
+  try {
+    await retryKnowledgeBaseDocument(managingKb.value.id, docId)
+    const doc = documents.value.find(item => item.id === docId)
+    if (doc) doc.status = 'PROCESSING'
+    ElMessage.success('已重新提交处理')
+  } catch {
+    ElMessage.error('重试失败')
+  }
+}
+
 function refreshKbs(data) {
   kbs.value = data || []
 }
@@ -429,13 +458,13 @@ defineExpose({ loadKbs, refreshKbs })
 
 <style scoped>
 .ai-sidebar {
-  width: 260px;
-  min-width: 260px;
-  background: #f8f7fb;
+  width: 296px;
+  min-width: 296px;
+  background: #f7f9f7;
   border-right: 1px solid var(--c-border);
   display: flex;
   flex-direction: column;
-  transition: all 0.25s ease;
+  transition: width 0.22s ease, min-width 0.22s ease, transform 0.22s ease;
   overflow: hidden;
 }
 
@@ -446,45 +475,51 @@ defineExpose({ loadKbs, refreshKbs })
 }
 
 .sidebar-inner {
-  width: 260px;
+  width: 296px;
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 18px 14px 14px;
 }
 
 .sidebar-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  padding: 0 4px;
 }
 
 .head-brand {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--c-text);
 }
 
 .brand-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--c-primary);
+  width: 9px;
+  height: 22px;
+  border-radius: 3px;
+  background: var(--c-accent);
 }
 
 .new-chat-btn {
   width: 100%;
-  margin-bottom: 20px;
+  margin-bottom: 22px;
   border-radius: var(--radius-sm);
-  height: 42px;
+  height: 40px;
   font-weight: 600;
+  color: #fff;
+  background: var(--c-primary);
+  border-color: var(--c-primary);
 }
 
-.sidebar-section { margin-bottom: 16px; }
+.new-chat-btn:hover { color: #fff; background: var(--c-primary-dark); border-color: var(--c-primary-dark); }
+
+.sidebar-section { margin-bottom: 18px; }
 
 .section-head {
   display: flex;
@@ -494,12 +529,17 @@ defineExpose({ loadKbs, refreshKbs })
 }
 
 .section-title {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: var(--c-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   padding: 0 4px;
+}
+
+.section-title b {
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--c-primary);
 }
 
 .add-agent-btn {
@@ -510,25 +550,28 @@ defineExpose({ loadKbs, refreshKbs })
 .agent-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  max-height: 144px;
+  overflow-y: auto;
 }
 
 .agent-card {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s;
   border: 1px solid transparent;
 }
 
-.agent-card:hover { background: var(--c-primary-light); }
+.agent-card:hover { background: #edf2ef; }
 
 .agent-card.active {
   background: var(--c-primary-light);
-  border-color: var(--c-primary);
+  border-color: #c7e2d9;
+  box-shadow: inset 3px 0 0 var(--c-primary);
 }
 
 .agent-icon { font-size: 20px; flex-shrink: 0; }
@@ -556,7 +599,8 @@ defineExpose({ loadKbs, refreshKbs })
 
 .agent-del:hover { color: #ef4444; }
 
-.conversations { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.conversations { flex: 1; min-height: 140px; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 0; }
+.conversation-head { margin-bottom: 7px; }
 
 .conv-list {
   flex: 1;
@@ -578,11 +622,11 @@ defineExpose({ loadKbs, refreshKbs })
   border: 1px solid transparent;
 }
 
-.conv-item:hover { background: #ede9f7; }
+.conv-item:hover { background: #edf2ef; }
 
 .conv-item.active {
   background: var(--c-primary-light);
-  border-color: var(--c-primary);
+  border-color: #c7e2d9;
 }
 
 .conv-icon { color: var(--c-text-muted); font-size: 15px; flex-shrink: 0; }
@@ -648,6 +692,8 @@ defineExpose({ loadKbs, refreshKbs })
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 132px;
+  overflow-y: auto;
 }
 
 .kb-card {
@@ -660,7 +706,7 @@ defineExpose({ loadKbs, refreshKbs })
   border: 1px solid transparent;
 }
 
-.kb-card:hover { background: #ede9f7; }
+.kb-card:hover { background: #edf2ef; }
 
 .kb-info {
   flex: 1;
@@ -774,6 +820,19 @@ defineExpose({ loadKbs, refreshKbs })
   display: flex; flex-direction: column;
 }
 
+.doc-status {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1f3f2;
+  color: var(--c-text-muted);
+  font-size: 10px;
+}
+.doc-status.ready { background: var(--c-primary-light); color: var(--c-primary); }
+.doc-status.processing { background: #fff7df; color: #9a6811; }
+.doc-status.failed { background: #fff0eb; color: #b94d38; }
+.doc-actions { display: flex; flex-shrink: 0; }
+
 .kb-mgr-list .doc-name {
   font-size: 13px; font-weight: 500; color: var(--c-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -882,5 +941,25 @@ defineExpose({ loadKbs, refreshKbs })
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 860px) {
+  .ai-sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: min(88vw, 310px);
+    min-width: min(88vw, 310px);
+    box-shadow: var(--c-shadow-lg);
+  }
+  .ai-sidebar.collapsed {
+    width: min(88vw, 310px);
+    min-width: min(88vw, 310px);
+    transform: translateX(-101%);
+  }
+  .sidebar-inner { width: min(88vw, 310px); }
+  .kb-manager-dialog :deep(.el-dialog) { width: calc(100vw - 24px) !important; margin: 12px auto; }
+  .kb-mgr-body { height: min(72vh, 560px); flex-direction: column; }
+  .kb-mgr-list { width: 100%; min-width: 0; height: 220px; border-right: 0; border-bottom: 1px solid var(--c-border); }
 }
 </style>

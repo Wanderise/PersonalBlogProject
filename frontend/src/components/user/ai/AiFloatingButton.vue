@@ -32,13 +32,13 @@ const visible = computed(() => route.path !== '/ai')
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4);
+  box-shadow: 0 4px 20px rgba(22, 122, 105, 0.32);
   transition: all 0.3s ease;
 }
 
 .ai-fab:hover {
   transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 8px 28px rgba(124, 58, 237, 0.5);
+  box-shadow: 0 8px 28px rgba(22, 122, 105, 0.4);
 }
 
 .ai-fab svg {

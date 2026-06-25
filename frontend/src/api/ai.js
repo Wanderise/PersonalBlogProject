@@ -1,6 +1,6 @@
-import request from './request.js'
+import request, { API_BASE } from './request.js'
 
-const BASE = 'http://localhost:8080'
+const BASE = API_BASE
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` })
 
 /* ========== 会话 ========== */
@@ -69,6 +69,10 @@ export function getKnowledgeBaseDocuments(id, params) {
 
 export function deleteKnowledgeBaseDocument(kbId, docId) {
   return request({ url: `/ai/knowledge-bases/${kbId}/documents/${docId}`, method: 'DELETE' })
+}
+
+export function retryKnowledgeBaseDocument(kbId, docId) {
+  return request({ url: `/ai/knowledge-bases/${kbId}/documents/${docId}/retry`, method: 'POST' })
 }
 
 export function uploadRagFiles(files, knowledgeBaseId) {

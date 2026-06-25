@@ -1,0 +1,23 @@
+[
+  {
+    "knowledgeBase": "java-notes",
+    "question": "Integer 的缓存范围和触发条件是什么？",
+    "expectedTerms": ["Integer", "缓存"],
+    "sourceDocument": "integer-cache.md",
+    "answerable": true
+  },
+  {
+    "knowledgeBase": "java-notes",
+    "question": "比较 Integer.valueOf 与 new Integer 的对象创建行为。",
+    "expectedTerms": ["valueOf", "对象"],
+    "sourceDocument": "integer-cache.md",
+    "answerable": true
+  },
+  {
+    "knowledgeBase": "java-notes",
+    "question": "这份知识库中没有记录的作者生日是什么？",
+    "expectedTerms": [],
+    "sourceDocument": null,
+    "answerable": false
+  }
+]

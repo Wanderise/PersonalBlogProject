@@ -4,7 +4,6 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
-import com.third.common.context.UserContext;
 import com.third.common.enumerate.RespondCode;
 import com.third.common.exception.NoAuthorization;
 import com.third.common.exception.NoSuchArticle;
@@ -23,6 +22,9 @@ import com.third.service.FileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -34,14 +36,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-/**
- * <p>
- * 文章 服务实现类
- * </p>
- *
- * @author bsgm
- * @since 2026-04-15
- */
 @Service
 @Slf4j
 public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
@@ -55,12 +49,22 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Autowired
     FileService fileService;
 
+    /**
+     * 文章到vo
+     *
+     * @param article 文章
+     * @return {@link ArticleVO }
+     */
     private ArticleVO articleToVO(Article article) {
         return articleToVO(article, true);
     }
 
     /**
-     * 文章转VO，generateUrls=false时列表视图跳过S3预签名URL生成
+     * 文章到vo
+     *
+     * @param article      文章
+     * @param generateUrls 生成URL
+     * @return {@link ArticleVO }
      */
     private ArticleVO articleToVO(Article article, boolean generateUrls) {
         if (article == null) {
@@ -70,10 +74,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         BeanUtils.copyProperties(article, articleVO);
         articleVO.setTag(articleMapper.getTagsByArticleId(article.getId()));
         if (article.getImage() != null && !article.getImage().isEmpty()) {
-            // image列存JSON数组字符串，如["key1","key2"]
             List<String> images = JSON.parseArray(article.getImage(), String.class);
             articleVO.setImage(images);
-            // 列表模式也生成第一张图的URL作为封面
             if (generateUrls) {
                 List<String> imageUrls = new ArrayList<>();
                 for (String image : images) {
@@ -92,6 +94,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return articleVO;
     }
 
+    /**
+     * 构建文章列表vo
+     *
+     * @param pageInfo 页面信息
+     * @return {@link ArticleListVO }
+     */
     private ArticleListVO buildArticleListVO(PageInfo<Article> pageInfo) {
         ArticleListVO vo = new ArticleListVO();
         vo.setPage(pageInfo.getPageNum());
@@ -100,7 +108,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         vo.setArticles(pageInfo.getList().stream().map(a -> articleToVO(a, false)).collect(Collectors.toList()));
         return vo;
     }
-//    保证Tag表存在对应标签后建立文章-标签关联
+
+    /**
+     * 简单添加标签
+     *
+     * @param ArticleId 文章ID
+     * @param tags      标签
+     */
     private void simpleAddTags(Integer ArticleId, List<String> tags){
         if (tags == null) {
             return;
@@ -120,6 +134,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
     }
 
+    /**
+     * 简单删除标签
+     *
+     * @param ArticleId 文章ID
+     * @param tags      标签
+     */
     private void simpleDeleteTags(Integer ArticleId, List<String> tags){
         articleMapper.deleteArticleTagById(ArticleId);
         if (tags == null) {
@@ -133,13 +153,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             }
             Integer tagId = tagByName.getId();
             int articleCount = articleMapper.getArticleCountByTagId(tagId);
-            // 只删除未被其他文章引用的标签，防止误删共享标签
             if(articleCount == 0) {
                 articleMapper.deleteTagById(tagId);
             }
         }
     }
 
+    /**
+     * 简单添加版本
+     *
+     * @param article 文章
+     * @param tags    标签
+     */
     public void simpleAddVersion(Article article, List<String> tags) {
         ArticleVersion articleVersion = new ArticleVersion();
         articleVersion.setContent(article.getContent());
@@ -153,9 +178,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     }
 
+    /**
+     * 添加文章
+     *
+     * @param articleDTO 文章dto
+     * @param userId     用户ID
+     * @return {@link ArticleVO }
+     */
     @Override
     @Transactional
-    public ArticleVO addArticle(ArticleAddDTO articleDTO) {
+    public ArticleVO addArticle(ArticleAddDTO articleDTO, Integer userId) {
         Article article = new Article();
         BeanUtils.copyProperties(articleDTO, article);
         if (article.getVersion() == null) {
@@ -164,8 +196,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         article.setImage(JSON.toJSONString(articleDTO.getImage()));
         article.setGmtCreate(LocalDateTime.now());
         article.setGmtModified(LocalDateTime.now());
-        // writerId由服务端从JWT中获取，防止客户端伪造作者
-        Integer userId = UserContext.getUserId();
         article.setWriterId(userId);
         log.info("article:{}", article);
 
@@ -179,7 +209,14 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return articleVO;
     }
 
+    /**
+     * 按id获取文章
+     *
+     * @param id ID
+     * @return {@link ArticleVO }
+     */
     @Override
+    @Cacheable(value = "article:info", key = "#id")
     public ArticleVO getArticleById(Integer id) {
         Article article = articleMapper.getArticleById(id);
         ArticleVO articleVO = articleToVO(article);
@@ -187,6 +224,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return articleVO;
     }
 
+    /**
+     * 获取文章列表
+     *
+     * @param page    页
+     * @param size    尺寸
+     * @param tag     标签
+     * @param keyword 关键词
+     * @return {@link ArticleListVO }
+     */
     @Override
     public ArticleListVO getArticleList(int page, int size, String tag, String keyword) {
         PageHelper.startPage(page, size);
@@ -198,11 +244,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return result;
     }
 
+    /**
+     * 删除文章
+     *
+     * @param id     ID
+     * @param userId 用户ID
+     */
     @Override
     @Transactional
-    public void deleteArticle(Integer id) {
-        Integer userId = UserContext.getUserId();
-        // 用baseMapper轻量查询，避免articleToVO生成S3预签名URL
+    @CacheEvict(value = "article:info", key = "#id")
+    public void deleteArticle(Integer id, Integer userId) {
         Article article = baseMapper.selectById(id);
         if (article == null) {
             throw new NoSuchArticle(RespondCode.NOT_FOUND);
@@ -210,8 +261,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (!Objects.equals(userId, article.getWriterId())) {
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         }
-        articleMapper.deleteArticleById(id);
         List<String> tags = articleMapper.getTagsByArticleId(id);
+        articleMapper.deleteArticleById(id);
         simpleDeleteTags(id, tags);
 
         if (article.getImage() != null && !article.getImage().isEmpty()) {
@@ -226,24 +277,28 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         articleVersionMapper.delete(queryWrapper);
     }
 
+    /**
+     * 按id更新文章
+     *
+     * @param id            ID
+     * @param articleAddDTO 文章添加到
+     * @param userId        用户ID
+     */
     @Override
     @Transactional
-    public void updateArticleById(Integer id, ArticleAddDTO articleAddDTO) {
-        Integer userId = UserContext.getUserId();
+    @CacheEvict(value = "article:info", key = "#id")
+    public void updateArticleById(Integer id, ArticleAddDTO articleAddDTO, Integer userId) {
         Article article = articleMapper.getArticleById(id);
         if (article == null) {
             throw new NoSuchArticle(RespondCode.NOT_FOUND);
         }
         if (!userId.equals(article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
-        // 更新前将当前版本归档到article_version表，支持回滚
         List<String> oldTags = articleMapper.getTagsByArticleId(article.getId());
         simpleAddVersion(article, oldTags);
-        // 更新 article 字段
         Double oldVersion = article.getVersion() == null ? 1.0 : article.getVersion();
         BeanUtils.copyProperties(articleAddDTO, article);
         if (articleAddDTO.getVersion() == null)
-            // BigDecimal避免浮点累加精度误差（如1.2000000000000002）
             article.setVersion(BigDecimal.valueOf(oldVersion).add(new BigDecimal("0.1")).doubleValue());
         article.setImage(JSON.toJSONString(articleAddDTO.getImage()));
         article.setGmtModified(LocalDateTime.now());
@@ -256,9 +311,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     }
 
+    /**
+     * 获取我的文章列表
+     *
+     * @param page   页
+     * @param size   尺寸
+     * @param userId 用户ID
+     * @return {@link ArticleListVO }
+     */
     @Override
-    public ArticleListVO getMyArticleList(int page, int size) {
-        Integer userId = UserContext.getUserId();
+    public ArticleListVO getMyArticleList(int page, int size, Integer userId) {
         PageHelper.startPage(page, size);
         List<Article> articles = articleMapper.getMyArticleList(userId);
         PageInfo<Article> pageInfo = new PageInfo<>(articles);
@@ -268,13 +330,19 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return result;
     }
 
+    /**
+     * 获取版本
+     *
+     * @param id     ID
+     * @param userId 用户ID
+     * @return {@link List }<{@link ArticleVersionVO }>
+     */
     @Override
-    public List<ArticleVersionVO> getVersions(Integer id) {
+    public List<ArticleVersionVO> getVersions(Integer id, Integer userId) {
         Article article = articleMapper.getArticleById(id);
         if (article == null) {
             throw new NoSuchArticle(RespondCode.NOT_FOUND);
         }
-        Integer userId = UserContext.getUserId();
         if (!Objects.equals(userId, article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         LambdaQueryWrapper<ArticleVersion> lambdaQueryWrapper = new LambdaQueryWrapper<>();
@@ -287,25 +355,33 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }).collect(Collectors.toList());
     }
 
+    /**
+     * 回滚版本
+     *
+     * @param id        ID
+     * @param versionId 版本id
+     * @param userId    用户ID
+     * @return {@link ArticleVersionVO }
+     */
     @Override
     @Transactional
-    public ArticleVersionVO rollbackVersion(Integer id, Integer versionId) {
+    @Caching(evict = {
+            @CacheEvict(value = "article:info", key = "#id"),
+            @CacheEvict(value = "article:version:info", allEntries = true)
+    })
+    public ArticleVersionVO rollbackVersion(Integer id, Integer versionId, Integer userId) {
         Article article = articleMapper.getArticleById(id);
         if (article == null) {
             throw new NoSuchArticle(RespondCode.NOT_FOUND);
         }
-        Integer userId = UserContext.getUserId();
         if (!userId.equals(article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
-        // 获取目标版本
-        ArticleVersionVO articleVersion = getVersion(id, versionId);
-        // 直接用目标版本内容覆盖 article，回到目标版本号
+        ArticleVersionVO articleVersion = getVersion(id, versionId, userId);
         article.setTitle(articleVersion.getTitle());
         article.setContent(articleVersion.getContent());
         article.setVersion(articleVersion.getVersion());
         article.setGmtModified(LocalDateTime.now());
         articleMapper.updateArticle(article);
-        // 重建 tag 关联
         List<String> oldTags = articleMapper.getTagsByArticleId(id);
         articleMapper.deleteArticleTagById(id);
         simpleDeleteTags(id, oldTags);
@@ -314,8 +390,23 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return articleVersion;
     }
 
+    /**
+     * 获取版本
+     *
+     * @param id        ID
+     * @param versionId 版本id
+     * @return {@link ArticleVersionVO }
+     */
     @Override
-    public ArticleVersionVO getVersion(Integer id, Integer versionId) {
+    @Cacheable(value = "article:version:info", key = "#userId + ':' + #id + ':' + #versionId")
+    public ArticleVersionVO getVersion(Integer id, Integer versionId, Integer userId) {
+        Article article = articleMapper.getArticleById(id);
+        if (article == null) {
+            throw new NoSuchArticle(RespondCode.NOT_FOUND);
+        }
+        if (!Objects.equals(userId, article.getWriterId())) {
+            throw new NoAuthorization(RespondCode.FORBIDDEN);
+        }
         LambdaQueryWrapper<ArticleVersion> lambdaQueryWrapper = new LambdaQueryWrapper<>();
         lambdaQueryWrapper.eq(ArticleVersion::getArticleId, id)
                 .eq(ArticleVersion::getId, versionId);

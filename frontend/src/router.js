@@ -1,15 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import MdEditor from '@/components/user/mdeditor/MdEditor.vue'
-import Test from '@/components/user/homeview/test.vue'
-import MainList from '@/components/user/articlelist/MainList.vue'
-import MyArticles from '@/components/user/articlelist/MyArticles.vue'
-import ArticleDetail from '@/components/user/articlelist/ArticleDetail.vue'
-import User from '@/components/user/user.vue'
-import LoginView from '@/components/user/auth/LoginView.vue'
-import RegisterView from '@/components/user/auth/RegisterView.vue'
-import UserProfile from '@/components/user/auth/UserProfile.vue'
-import AiChatPage from '@/components/user/ai/AiChatPage.vue'
+const MdEditor = () => import('@/components/user/mdeditor/MdEditor.vue')
+const Test = () => import('@/components/user/homeview/test.vue')
+const MainList = () => import('@/components/user/articlelist/MainList.vue')
+const MyArticles = () => import('@/components/user/articlelist/MyArticles.vue')
+const ArticleDetail = () => import('@/components/user/articlelist/ArticleDetail.vue')
+const User = () => import('@/components/user/user.vue')
+const LoginView = () => import('@/components/user/auth/LoginView.vue')
+const RegisterView = () => import('@/components/user/auth/RegisterView.vue')
+const UserProfile = () => import('@/components/user/auth/UserProfile.vue')
+const AiChatPage = () => import('@/components/user/ai/AiChatPage.vue')
 
 const routes = [
   { path: '/', redirect: '/User/1/home' },

@@ -3,13 +3,14 @@ package com.third.service;
 import io.qdrant.client.ConditionFactory;
 import io.qdrant.client.QdrantClient;
 import io.qdrant.client.grpc.Points;
-import io.swagger.models.auth.In;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class QdrantManager {
 
     private final QdrantClient qdrantClient;
@@ -44,6 +45,12 @@ public class QdrantManager {
                         )
                         .build();
 
-        qdrantClient.deleteAsync(deletePoints);
+        try {
+            qdrantClient.deleteAsync(deletePoints).get();
+            log.info("Qdrant 删除成功: {}={}", field, value);
+        } catch (Exception e) {
+            log.error("Qdrant 删除失败: {}={}, 原因: {}", field, value, e.getMessage(), e);
+            throw new IllegalStateException("Qdrant 删除失败: " + field + "=" + value, e);
+        }
     }
 }
