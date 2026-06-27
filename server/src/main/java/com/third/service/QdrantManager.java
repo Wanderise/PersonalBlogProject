@@ -35,22 +35,37 @@ public class QdrantManager {
                 .addMust(ConditionFactory.match(field, value))
                 .build();
 
-        Points.DeletePoints deletePoints =
-                Points.DeletePoints.newBuilder()
-                        .setCollectionName(collectionName)
-                        .setPoints(
-                                Points.PointsSelector.newBuilder()
-                                        .setFilter(filter)
-                                        .build()
-                        )
-                        .build();
+        Points.DeletePoints deletePoints = Points.DeletePoints.newBuilder()
+                .setCollectionName(collectionName)
+                .setPoints(Points.PointsSelector.newBuilder().setFilter(filter).build())
+                .build();
 
         try {
             qdrantClient.deleteAsync(deletePoints).get();
             log.debug("Qdrant delete success: {}={}", field, value);
         } catch (Exception e) {
-            log.error("Qdrant 删除失败: {}={}, 原因: {}", field, value, e.getMessage(), e);
-            throw new IllegalStateException("Qdrant 删除失败: " + field + "=" + value, e);
+            if (isMissingCollection(e)) {
+                log.warn("Qdrant delete skipped because collection is missing: collection={} {}={}",
+                        collectionName, field, value);
+                return;
+            }
+            log.error("Qdrant delete failed: {}={}, reason={}", field, value, e.getMessage(), e);
+            throw new IllegalStateException("Qdrant delete failed: " + field + "=" + value, e);
         }
+    }
+
+    private boolean isMissingCollection(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && message.contains("NOT_FOUND")
+                    && message.contains("Collection")
+                    && message.contains("doesn't exist")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

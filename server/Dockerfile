@@ -6,11 +6,13 @@ COPY pom.xml ./
 COPY common/pom.xml common/pom.xml
 COPY pojo/pom.xml pojo/pom.xml
 COPY server/pom.xml server/pom.xml
-RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -pl server -am dependency:resolve -DskipTests
-COPY common/src common/src
+RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -N install -DskipTests
 COPY pojo/src pojo/src
+RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -pl pojo install -DskipTests
+COPY common/src common/src
+RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -pl common install -DskipTests
 COPY server/src server/src
-RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -pl server -am package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -pl server package -DskipTests
 
 FROM ${DOCKER_IMAGE_PREFIX}library/eclipse-temurin:17-jre
 WORKDIR /app

@@ -1,7 +1,5 @@
 package com.third.mapper;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.third.pojo.entity.ArticleTag;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
@@ -13,6 +11,6 @@ import org.apache.ibatis.annotations.Mapper;
  * @since 2026-04-15
  */
 @Mapper
-public interface ArticleTagMapper extends BaseMapper<ArticleTag> {
+public interface ArticleTagMapper {
 
 }

@@ -216,7 +216,7 @@ import { ElMessage } from 'element-plus'
 import { Expand, Promotion, CirclePlus, Document, FolderOpened, CircleClose, Search, Collection, MagicStick } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { getMyArticles } from '@/api/article.js'
-import { uploadRagFiles, submitRagArticles, getKnowledgeBaseDocuments } from '@/api/ai.js'
+import { uploadRagFiles, submitRagArticles } from '@/api/ai.js'
 import { API_BASE } from '@/api/request.js'
 
 const router = useRouter()
@@ -334,8 +334,9 @@ function scrollBottom() {
 async function handleEnter() {
   if (!canSend.value) return
   const text = inputText.value.trim()
+  let keepPendingAfterSend = false
 
-  // 发送时先上传待发送文件和文章
+  // Upload only needs to create the RAG document records. Ingestion continues in the background.
   const hasPending = pendingFiles.value.length > 0 || pendingArticles.value.length > 0
   if (hasPending) {
     const initialAttachmentCount = attachments.value.length
@@ -345,10 +346,8 @@ async function handleEnter() {
       if (uploadProgress.value < 90) uploadProgress.value += 5
     }, 100)
     const kbId = props.selectedKbIds?.length ? props.selectedKbIds[0] : null
-    const processingIds = []
     try {
       if (kbId) {
-        // 上传文件
         if (pendingFiles.value.length) {
           const fetchRes = await uploadRagFiles(pendingFiles.value, kbId)
           if (!fetchRes.ok) throw new Error('Upload failed')
@@ -356,27 +355,28 @@ async function handleEnter() {
           if (body.code !== 200) throw new Error(body.msg || 'Upload failed')
           const docs = body.data || []
           for (const doc of docs) {
-            attachments.value.push({ type: 'file', name: doc.title, r2Key: doc.r2Key, id: doc.id })
-            if (doc.id && doc.status !== 'READY') processingIds.push(doc.id)
+            attachments.value.push({
+              type: 'file',
+              name: doc.title,
+              r2Key: doc.r2Key,
+              id: doc.id,
+              status: doc.status
+            })
           }
         }
-        // 上传文章
         if (pendingArticles.value.length) {
           const articleIds = pendingArticles.value.map(a => a.id)
           const artRes = await submitRagArticles(articleIds, kbId)
           if (artRes.code !== 200) throw new Error(artRes.msg || 'Upload failed')
-          for (const doc of (artRes.data || [])) {
-            if (doc.id && doc.status !== 'READY') processingIds.push(doc.id)
-          }
         }
-        if (processingIds.length) await waitForRagReady(kbId, processingIds)
         emit('kb-refresh')
+        window.setTimeout(() => emit('kb-refresh'), 2000)
       } else {
         for (const file of pendingFiles.value) {
           attachments.value.push({ type: 'file', name: file.name })
         }
       }
-      // 将待发送文件/文章移入附件显示列表
+      // Move selected articles into the message attachment list after the upload request succeeds.
       for (const art of pendingArticles.value) {
         if (!attachments.value.find(a => a.type === 'article' && a.id === art.id)) {
           attachments.value.push(art)
@@ -388,26 +388,35 @@ async function handleEnter() {
       uploadProgress.value = 0
       attachments.value.splice(initialAttachmentCount)
       emit('kb-refresh')
-      ElMessage.error(error.message || '上传失败')
-      return
+      if (!text) {
+        ElMessage.error(error.message || '上传失败')
+        return
+      }
+      keepPendingAfterSend = true
+      ElMessage.warning('文件上传失败，已先发送文字内容')
     }
     clearInterval(progressTimer)
     uploadProgress.value = 100
-    pendingFiles.value = []
-    pendingArticles.value = []
+    if (!keepPendingAfterSend) {
+      pendingFiles.value = []
+      pendingArticles.value = []
+    }
     setTimeout(() => { uploading.value = false; uploadProgress.value = 0 }, 500)
   }
 
-  // 允许只发文件不发文本，自动用"检索知识库xxx文件"格式填充以便检索
+  // Allow file-only messages by generating a short prompt for knowledge-base retrieval.
   if (!text && !attachments.value.length) return
-  const finalText = text || ('检索知识库' + attachments.value.map(a => {
+  const finalText = text || ('请参考刚上传到知识库的文件：' + attachments.value.map(a => {
     return (a.type === 'article' ? '【文章】' : '') + a.name
-  }).join('、') + '文件')
+  }).join('、'))
 
   emit('send', { text: finalText, attachments: [...attachments.value] })
   inputText.value = ''
   attachments.value = []
-  pendingFiles.value = []
+  if (!keepPendingAfterSend) {
+    pendingFiles.value = []
+    pendingArticles.value = []
+  }
   nextTick(() => {
     if (inputRef.value) { inputRef.value.style.height = 'auto' }
   })
@@ -415,21 +424,6 @@ async function handleEnter() {
 
 function send() {
   handleEnter()
-}
-
-async function waitForRagReady(kbId, documentIds) {
-  const pending = new Set(documentIds)
-  for (let attempt = 0; attempt < 60 && pending.size; attempt++) {
-    const response = await getKnowledgeBaseDocuments(kbId)
-    const documents = response.data || []
-    for (const document of documents) {
-      if (!pending.has(document.id)) continue
-      if (document.status === 'FAILED') throw new Error(`文档处理失败：${document.title}`)
-      if (document.status === 'READY') pending.delete(document.id)
-    }
-    if (pending.size) await new Promise(resolve => setTimeout(resolve, 1000))
-  }
-  if (pending.size) throw new Error('文档处理超时，请稍后重试')
 }
 
 function removeAttachment(i) {

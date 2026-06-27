@@ -220,7 +220,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick } from 'vue'
+import { ref, reactive, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ChatDotRound, ChatLineSquare, EditPen, Delete, Plus, Setting, Document, Tickets, Notebook, FolderOpened, Reading, Loading, Link, RefreshRight } from '@element-plus/icons-vue'
 import { createAgent, deleteAgent, getKnowledgeBases, createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBaseDocuments, deleteKnowledgeBaseDocument, retryKnowledgeBaseDocument } from '@/api/ai.js'
@@ -333,13 +333,24 @@ async function saveKb() {
 }
 
 async function removeKb(id) {
-  await ElMessageBox.confirm('删除知识库将同时删除其中的所有文档和向量数据', '警告', { type: 'warning' })
   try {
+    await ElMessageBox.confirm('删除知识库将同时删除其中的所有文档和向量数据', '警告', { type: 'warning' })
     await deleteKnowledgeBase(id)
+    kbs.value = kbs.value.filter(kb => kb.id !== id)
     emit('kbsChange', props.selectedKbIds.filter(kbId => kbId !== id))
+    if (managingKb.value?.id === id) {
+      showKbManager.value = false
+      managingKb.value = null
+      documents.value = []
+      activeDoc.value = null
+      previewContent.value = ''
+      previewError.value = ''
+      previewUrl.value = ''
+    }
     ElMessage.success('已删除')
     emit('refreshKbs')
-  } catch {
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
     ElMessage.error('删除失败')
   }
 }
@@ -452,6 +463,8 @@ async function retryDoc(docId) {
 function refreshKbs(data) {
   kbs.value = data || []
 }
+
+watch(() => props.knowledgeBases, refreshKbs, { immediate: true })
 
 defineExpose({ loadKbs, refreshKbs })
 </script>

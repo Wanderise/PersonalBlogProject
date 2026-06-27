@@ -34,12 +34,17 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
+    private static final int MAX_OBJECT_NAME_LENGTH = 120;
+    private static final long RAG_READY_TIMEOUT_MS = 30_000L;
+    private static final long RAG_READY_POLL_INTERVAL_MS = 500L;
 
     @Autowired
     private FileService fileService;
@@ -59,8 +64,14 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Value("${app.rag.search.top-k:6}")
     private int searchTopK;
 
+    @Value("${app.rag.search.document-top-k:30}")
+    private int documentSearchTopK;
+
     @Value("${app.rag.search.similarity-threshold:0.2}")
     private double similarityThreshold;
+
+    @Value("${app.rag.search.document-similarity-threshold:0.0}")
+    private double documentSimilarityThreshold;
 
 
     /**
@@ -128,6 +139,34 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
     }
 
+    private static String safeObjectName(String name, String fallback) {
+        String safeName = (name == null || name.isBlank()) ? fallback : name.trim();
+        safeName = safeName.replaceAll("[/\\\\]", "_")
+                .replaceAll("[^A-Za-z0-9._-]", "_")
+                .replaceAll("_+", "_");
+        while (safeName.contains("..")) {
+            safeName = safeName.replace("..", "_");
+        }
+        safeName = safeName.replaceAll("^[._-]+", "").replaceAll("[._-]+$", "");
+        if (safeName.isBlank()) {
+            safeName = fallback;
+        }
+        if (safeName.length() > MAX_OBJECT_NAME_LENGTH) {
+            safeName = safeName.substring(0, MAX_OBJECT_NAME_LENGTH);
+        }
+        return safeName;
+    }
+
+    private void deleteStoredObjectIfValid(String objectKey) {
+        try {
+            FileService.validateObjectKey(objectKey, "knowledge_base/");
+        } catch (IllegalArgumentException e) {
+            log.warn("skip deleting invalid knowledge base object key");
+            return;
+        }
+        fileService.deleteObject(objectKey);
+    }
+
     /**
      * 添加知识库
      *
@@ -188,7 +227,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         knowledgeBaseMapper.deleteById(id);
 
         for (RagFile ragFile : ragFiles) {
-            fileService.deleteObject(ragFile.getR2Key());
+            deleteStoredObjectIfValid(ragFile.getR2Key());
         }
     }
 
@@ -217,9 +256,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 ragFile.setKnowledgeBaseId(knowledgeBaseId);
                 ragFile.setFileType(simplifyContentType(file.getContentType()));
                 String originalFilename = file.getOriginalFilename();
-                String safeFilename = originalFilename != null
-                        ? originalFilename.replaceAll("[/\\\\]", "_")
-                        : "unnamed";
+                String safeFilename = safeObjectName(originalFilename, "unnamed");
                 ragFile.setTitle(safeFilename);
                 ragFile.setGmtCreate(LocalDate.now());
                 ragFile.setStatus("PROCESSING");
@@ -234,7 +271,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                         .eq(RagFile::getKnowledgeBaseId, knowledgeBaseId));
                 if (hashexist != null) {
                     if ("FAILED".equals(hashexist.getStatus())) {
+                        hashexist.setTitle(safeFilename);
+                        hashexist.setFileType(ragFile.getFileType());
+                        hashexist.setR2Key("knowledge_base/" + knowledgeBaseId + "/" + safeFilename);
+                        hashexist.setVersion(hashexist.getVersion() == null ? 0.01 : hashexist.getVersion());
                         hashexist.setStatus("PROCESSING");
+                        fileService.uploadFile(hashexist.getR2Key(), content, file.getContentType());
                         ragFileMapper.updateById(hashexist);
                         ragJobDispatcher.dispatch(hashexist.getId());
                     }
@@ -301,7 +343,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                     log.error("文章 {} 不存在", articleId);
                     continue;
                 }
-                if (!userId.equals(article.getWriterId())) {
+                if (!Objects.equals(userId, article.getWriterId())) {
                     throw new NoAuthorization(RespondCode.FORBIDDEN);
                 }
                 String content = article.getContent();
@@ -310,9 +352,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 ragFile.setTitle(article.getTitle());
                 ragFile.setGmtCreate(LocalDate.now());
                 ragFile.setStatus("PROCESSING");
-                String safeTitle = article.getTitle() != null
-                        ? article.getTitle().replaceAll("[/\\\\]", "_")
-                        : "unnamed";
+                String safeTitle = safeObjectName(article.getTitle(), "article-" + article.getId());
                 ragFile.setR2Key("knowledge_base/" + knowledgeBaseId + "/" + safeTitle + ".md");
                 String hash = sha256(content);
                 ragFile.setHash(hash);
@@ -321,7 +361,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                         .eq(RagFile::getKnowledgeBaseId, knowledgeBaseId));
                 if (hashExist != null) {
                     if ("FAILED".equals(hashExist.getStatus())) {
+                        hashExist.setTitle(article.getTitle());
+                        hashExist.setFileType("md");
+                        hashExist.setR2Key("knowledge_base/" + knowledgeBaseId + "/" + safeTitle + ".md");
+                        hashExist.setVersion(article.getVersion());
                         hashExist.setStatus("PROCESSING");
+                        fileService.uploadMarkdown(hashExist.getR2Key(), content);
                         ragFileMapper.updateById(hashExist);
                         ragJobDispatcher.dispatch(hashExist.getId());
                     }
@@ -364,10 +409,72 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
      * @return {@link String }
      */
     @Override
+    public String queryKnowledgeBase(String knowledgeBaseIds, String documentIds, String message, Integer userId) {
+        List<Integer> ids = parseIds(knowledgeBaseIds);
+        List<Integer> docIds = parseIds(documentIds);
+        if (ids.isEmpty() && docIds.isEmpty()) {
+            return "";
+        }
+        ids.forEach(id -> assertKnowledgeBaseOwner(id, userId));
+        if (!docIds.isEmpty()) {
+            assertRagFilesOwner(docIds, userId);
+        }
+        String filter = !docIds.isEmpty()
+                ? docIds.stream().map(id -> "document_id == " + id).collect(Collectors.joining(" || "))
+                : ids.stream().map(id -> "kb_id == " + id).collect(Collectors.joining(" || "));
+        SearchRequest searchRequest = SearchRequest.builder()
+                .query(message)
+                .topK(!docIds.isEmpty() ? documentSearchTopK : searchTopK)
+                .filterExpression(filter)
+                .similarityThreshold(!docIds.isEmpty() ? documentSimilarityThreshold : similarityThreshold)
+                .build();
+        List<Document> documents = vectorStore.similaritySearch(searchRequest);
+        return documents.stream().map(Document::getText).collect(Collectors.joining("\n"));
+    }
+
     public String queryKnowledgeBase(String knowledgeBaseIds, String message, Integer userId) {
-        List<Integer> ids;
+        return queryKnowledgeBase(knowledgeBaseIds, null, message, userId);
+    }
+
+    @Override
+    public void waitForRagFilesReady(String documentIds, Integer userId) {
+        List<Integer> ids = parseIds(documentIds);
+        if (ids.isEmpty()) {
+            return;
+        }
+        assertRagFilesOwner(ids, userId);
+        long deadline = System.currentTimeMillis() + RAG_READY_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            List<RagFile> files = selectRagFiles(ids);
+            boolean allReady = true;
+            for (RagFile file : files) {
+                if ("FAILED".equals(file.getStatus())) {
+                    throw new IllegalStateException("文档解析失败：" + file.getTitle());
+                }
+                if (!"READY".equals(file.getStatus())) {
+                    allReady = false;
+                    break;
+                }
+            }
+            if (allReady) {
+                return;
+            }
+            try {
+                Thread.sleep(RAG_READY_POLL_INTERVAL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("等待文档解析被中断", e);
+            }
+        }
+        throw new IllegalStateException("文档还在解析中，请稍后再试");
+    }
+
+    private List<Integer> parseIds(String rawIds) {
+        if (rawIds == null || rawIds.isBlank()) {
+            return Collections.emptyList();
+        }
         try {
-            ids = Arrays.stream(knowledgeBaseIds.split(","))
+            return Arrays.stream(rawIds.split(","))
                     .map(String::trim)
                     .filter(id -> !id.isEmpty())
                     .map(Integer::valueOf)
@@ -376,21 +483,21 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         } catch (NumberFormatException e) {
             throw new NoAuthorization(RespondCode.PARAM_ERROR);
         }
-        if (ids.isEmpty()) {
-            return "";
+    }
+
+    private void assertRagFilesOwner(List<Integer> documentIds, Integer userId) {
+        List<RagFile> files = selectRagFiles(documentIds);
+        if (files.size() != documentIds.size()) {
+            throw new NoAuthorization(RespondCode.NOT_FOUND);
         }
-        ids.forEach(id -> assertKnowledgeBaseOwner(id, userId));
-        String filter = ids.stream()
-                .map(id -> "kb_id == " + id)
-                .collect(Collectors.joining(" || "));
-        SearchRequest searchRequest = SearchRequest.builder()
-                .query(message)
-                .topK(searchTopK)
-                .filterExpression(filter)
-                .similarityThreshold(similarityThreshold)
-                .build();
-        List<Document> documents = vectorStore.similaritySearch(searchRequest);
-        return documents.stream().map(Document::getText).collect(Collectors.joining("\n"));
+        files.forEach(file -> assertKnowledgeBaseOwner(file.getKnowledgeBaseId(), userId));
+    }
+
+    private List<RagFile> selectRagFiles(List<Integer> documentIds) {
+        if (documentIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return ragFileMapper.selectList(new LambdaQueryWrapper<RagFile>().in(RagFile::getId, documentIds));
     }
 
     /**
@@ -426,7 +533,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
         qdrantManager.deleteByDocumentId(documentId);
         ragFileMapper.deleteById(documentId);
-        fileService.deleteObject(ragFile.getR2Key());
+        deleteStoredObjectIfValid(ragFile.getR2Key());
     }
 
     @Override
@@ -439,6 +546,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         if (ragFile == null) {
             throw new NoAuthorization(RespondCode.NOT_FOUND);
         }
+        FileService.validateObjectKey(ragFile.getR2Key(), "knowledge_base/");
         ragFile.setStatus("PROCESSING");
         ragFileMapper.updateById(ragFile);
         ragJobDispatcher.dispatch(documentId);

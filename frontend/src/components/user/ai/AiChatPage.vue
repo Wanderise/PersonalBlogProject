@@ -179,6 +179,9 @@ async function handleSend({ text, attachments }) {
 
   const attList = attachments || []
   const hasAttach = attList.length > 0
+  const documentIds = attList
+    .filter(a => a.type !== 'article' && a.id)
+    .map(a => a.id)
   const attachNames = hasAttach ? attList.map(a => a.name).join('、') : ''
   const aiPrompt = text || (hasAttach ? `请参考知识库中刚上传的文件：${attachNames}` : '')
 
@@ -207,6 +210,7 @@ async function handleSend({ text, attachments }) {
       aiPrompt,
       selectedAgent.value,
       selectedKbIds.value,
+      documentIds,
       abortCtrl.signal
     )
 

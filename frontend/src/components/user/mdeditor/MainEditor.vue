@@ -174,8 +174,8 @@ async function submit() {
 
     if (isEdit) {
       await updateArticle(editId, payload)
+      await router.push(`/article/${editId}`)
       ElMessage.success('文章已更新')
-      router.push(`/article/${editId}`)
     } else {
       const res = await uploadArticleRequest(payload)
       ElMessage.success('文章发布成功')

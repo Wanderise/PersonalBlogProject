@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -146,7 +147,7 @@ public class UserServiceImpl implements UserService {
         }
         String name = requireUserName(userDTO.getName());
         User user = userMapper.getUserInfoByName(name);
-        if (user != null && !user.getId().equals(userId)) {
+        if (user != null && !Objects.equals(user.getId(), userId)) {
             throw new UserNameHasExist(RespondCode.NAME_EXIST);
         }
         LocalDateTime now = LocalDateTime.now();

@@ -16,24 +16,29 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class JwtInterceptor implements HandlerInterceptor {
 
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 放行预检请求，浏览器CORS跨域会先发OPTIONS探测
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
+        if (isPublicRequest(request)) {
+            return true;
+        }
+
         String authorization = request.getHeader("Authorization");
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             throw new NoAuthorization(RespondCode.UNAUTHORIZED);
         }
+
         String token = authorization.substring(7);
         try {
-            // 从JWT中提取用户标识，写入ThreadLocal供本次请求使用
             Claims claims = JJWTUtil.parseJWT(token);
             String userName = (String) claims.get("UserName");
             Object userIdClaim = claims.get("userId");
             if (userName == null || userIdClaim == null) {
                 throw new NoAuthorization(RespondCode.UNAUTHORIZED);
             }
+
             Integer userId = ((Number) userIdClaim).intValue();
             UserVO userVO = new UserVO();
             userVO.setId(userId);
@@ -43,13 +48,28 @@ public class JwtInterceptor implements HandlerInterceptor {
         } catch (NoAuthorization e) {
             throw e;
         } catch (Exception e) {
-            log.error("token解析失败", e);
+            log.warn("token parse failed");
             throw new NoAuthorization(RespondCode.UNAUTHORIZED);
         }
     }
-    // 请求结束后必须清理ThreadLocal，防止线程池复用时用户信息串号
+
+    private boolean isPublicRequest(HttpServletRequest request) {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+        String path = request.getRequestURI();
+        if (path == null) {
+            return false;
+        }
+        String contextPath = request.getContextPath();
+        if (contextPath != null && !contextPath.isBlank() && path.startsWith(contextPath)) {
+            path = path.substring(contextPath.length());
+        }
+        return path.matches("/article/\\d+");
+    }
+
     @Override
-    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         UserContext.clear();
     }
 }

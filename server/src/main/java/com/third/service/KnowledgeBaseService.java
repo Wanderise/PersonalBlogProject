@@ -19,7 +19,9 @@ public interface KnowledgeBaseService {
 
     List<RagFileVO> uploadRagArticle(RagFileDTO ragFileDTO, Integer userId);
 
-    String queryKnowledgeBase(String knowledgeBaseIds, String message, Integer userId);
+    String queryKnowledgeBase(String knowledgeBaseIds, String documentIds, String message, Integer userId);
+
+    void waitForRagFilesReady(String documentIds, Integer userId);
 
     List<RagFileVO> getRagFiles(Integer id, Integer userId);
 

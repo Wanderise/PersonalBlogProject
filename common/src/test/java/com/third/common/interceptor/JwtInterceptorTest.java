@@ -35,6 +35,30 @@ class JwtInterceptorTest {
     }
 
     @Test
+    void allowsPublicArticleDetailGetWithoutBearerToken() throws Exception {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/article/1");
+        when(request.getContextPath()).thenReturn("");
+
+        boolean allowed = interceptor.preHandle(request, mock(HttpServletResponse.class), new Object());
+
+        assertEquals(true, allowed);
+    }
+
+    @Test
+    void rejectsArticleMutationWithoutBearerToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getMethod()).thenReturn("PUT");
+        when(request.getRequestURI()).thenReturn("/article/1");
+
+        NoAuthorization error = assertThrows(NoAuthorization.class,
+                () -> interceptor.preHandle(request, mock(HttpServletResponse.class), new Object()));
+
+        assertEquals(401, error.getCode());
+    }
+
+    @Test
     void clearsUserContextAfterRequestCompletion() throws Exception {
         UserVO user = new UserVO();
         user.setId(7);

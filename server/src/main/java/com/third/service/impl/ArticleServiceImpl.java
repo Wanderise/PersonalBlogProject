@@ -284,7 +284,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article == null) {
             throw new NoSuchArticle(RespondCode.NOT_FOUND);
         }
-        if (!userId.equals(article.getWriterId()))
+        if (!Objects.equals(userId, article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         List<String> oldTags = articleMapper.getTagsByArticleId(article.getId());
         simpleAddVersion(article, oldTags);
@@ -362,7 +362,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article == null) {
             throw new NoSuchArticle(RespondCode.NOT_FOUND);
         }
-        if (!userId.equals(article.getWriterId()))
+        if (!Objects.equals(userId, article.getWriterId()))
             throw new NoAuthorization(RespondCode.FORBIDDEN);
         ArticleVersionVO articleVersion = getVersion(id, versionId, userId);
         article.setTitle(articleVersion.getTitle());

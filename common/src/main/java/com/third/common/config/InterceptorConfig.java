@@ -22,7 +22,7 @@ public class InterceptorConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns("/user/login", "/user/register",
                         "/doc.html", "/v3/api-docs/**", "/webjars/**", "/swagger-ui/**",
-                        "/article/list", "/article/{id:[0-9]+}", "/file/download/url",
+                        "/article/list", "/file/download/url",
                         "/actuator/health", "/actuator/info");
     }
     

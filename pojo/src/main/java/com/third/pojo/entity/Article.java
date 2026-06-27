@@ -1,6 +1,7 @@
 package com.third.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
@@ -42,6 +43,7 @@ public class Article implements Serializable {
       @ApiModelProperty("作者id")
     private Integer writerId;
 
+    @TableField(exist = false)
     private String writerName;
 
     private LocalDateTime gmtCreate;

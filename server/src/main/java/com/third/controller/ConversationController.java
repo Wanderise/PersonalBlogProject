@@ -89,11 +89,21 @@ public class ConversationController {
                                        @RequestParam Integer conversationId,
                                        @RequestParam(required = false) Integer agentId,
                                        @RequestParam(required = false) String knowledgeBaseIds,
+                                       @RequestParam(required = false) String documentIds,
                                        @RequestParam(required = false) String articleIds) {
         Integer userId = UserContext.getUserId();
         String systemPrompt = agentId != null ? agentService.resolveSystemPrompt(agentId, userId) : "你是一个有帮助的AI助手";
-        String ragPrompt = knowledgeBaseIds != null && !knowledgeBaseIds.isBlank()
-                ? knowledgeBaseService.queryKnowledgeBase(knowledgeBaseIds, message, userId)
+        if (documentIds != null && !documentIds.isBlank()) {
+            try {
+                knowledgeBaseService.waitForRagFilesReady(documentIds, userId);
+            } catch (IllegalStateException e) {
+                conversationService.saveUserMessage(message, conversationId, userId);
+                return Flux.just(e.getMessage());
+            }
+        }
+        String ragPrompt = (knowledgeBaseIds != null && !knowledgeBaseIds.isBlank())
+                || (documentIds != null && !documentIds.isBlank())
+                ? knowledgeBaseService.queryKnowledgeBase(knowledgeBaseIds, documentIds, message, userId)
                 : "";
 
         String prompt = """

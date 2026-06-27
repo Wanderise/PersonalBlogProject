@@ -1,6 +1,8 @@
 package com.third.controller;
 
 import com.third.common.context.UserContext;
+import com.third.common.enumerate.RespondCode;
+import com.third.common.exception.NoAuthorization;
 import com.third.common.result.Result;
 import com.third.pojo.dto.ArticleAddDTO;
 import com.third.pojo.vo.ArticleListVO;
@@ -28,10 +30,18 @@ public class ArticleController {
     @Autowired
     private ArticleService articleService;
 
+    private Integer requireLogin() {
+        Integer userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new NoAuthorization(RespondCode.UNAUTHORIZED);
+        }
+        return userId;
+    }
+
     @PostMapping("/add")
     @Operation(summary = "Add article")
     public Result<ArticleVO> addArticle(@RequestBody ArticleAddDTO article) {
-        Integer userId = UserContext.getUserId();
+        Integer userId = requireLogin();
         ArticleVO articleVO = articleService.addArticle(article, userId);
         return Result.success(articleVO);
     }
@@ -50,7 +60,7 @@ public class ArticleController {
 
     @DeleteMapping("/{id}")
     public Result<Void> deleteArticle(@PathVariable("id") Integer id) {
-        Integer userId = UserContext.getUserId();
+        Integer userId = requireLogin();
         articleService.deleteArticle(id, userId);
         return Result.success();
     }
@@ -58,21 +68,21 @@ public class ArticleController {
     @PutMapping("/{id}")
     public Result<Void> updateArticle(@PathVariable("id") Integer id,
                                       @RequestBody ArticleAddDTO articleAddDTO) {
-        Integer userId = UserContext.getUserId();
+        Integer userId = requireLogin();
         articleService.updateArticleById(id, articleAddDTO, userId);
         return Result.success();
     }
 
     @GetMapping("/my")
     public Result<ArticleListVO> getMyArticle(int page, int size) {
-        Integer userId = UserContext.getUserId();
+        Integer userId = requireLogin();
         ArticleListVO articleListVO = articleService.getMyArticleList(page, size, userId);
         return Result.success(articleListVO);
     }
 
     @GetMapping("/{id}/versions")
     public Result<List<ArticleVersionVO>> getVersions(@PathVariable("id") Integer id) {
-        Integer userId = UserContext.getUserId();
+        Integer userId = requireLogin();
         List<ArticleVersionVO> articleVersionVOS = articleService.getVersions(id, userId);
         return Result.success(articleVersionVOS);
     }
@@ -80,7 +90,7 @@ public class ArticleController {
     @GetMapping("/{id}/versions/{versionId}")
     public Result<ArticleVersionVO> getVersion(@PathVariable("id") Integer id,
                                                @PathVariable("versionId") Integer versionId) {
-        Integer userId = UserContext.getUserId();
+        Integer userId = requireLogin();
         ArticleVersionVO articleVersionVO = articleService.getVersion(id, versionId, userId);
         return Result.success(articleVersionVO);
     }
@@ -88,7 +98,7 @@ public class ArticleController {
     @PostMapping("/{id}/versions/{versionId}/rollback")
     public Result<ArticleVersionVO> rollbackVersion(@PathVariable("id") Integer id,
                                                     @PathVariable("versionId") Integer versionId) {
-        Integer userId = UserContext.getUserId();
+        Integer userId = requireLogin();
         ArticleVersionVO articleVersionVO = articleService.rollbackVersion(id, versionId, userId);
         return Result.success(articleVersionVO);
     }

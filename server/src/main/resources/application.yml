@@ -33,6 +33,7 @@ spring:
         host: ${QDRANT_HOST:localhost}
         port: ${QDRANT_GRPC_PORT:6334}
         collection-name: ${QDRANT_COLLECTION:my-collection}
+        initialize-schema: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -77,7 +78,9 @@ app:
     transport: ${RAG_TRANSPORT:rabbitmq}
     search:
       top-k: ${RAG_SEARCH_TOP_K:6}
+      document-top-k: ${RAG_DOCUMENT_SEARCH_TOP_K:30}
       similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.2}
+      document-similarity-threshold: ${RAG_DOCUMENT_SIMILARITY_THRESHOLD:0.0}
     rabbitmq:
       concurrency: ${RAG_RABBITMQ_CONCURRENCY:2}
 
@@ -96,7 +99,7 @@ management:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
       id-type: auto
