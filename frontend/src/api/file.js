@@ -8,6 +8,16 @@ export function getUploadUrl(data) {
   })
 }
 
+export function uploadObject(data) {
+  return request({
+    url: '/file/upload',
+    method: 'POST',
+    data,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30000
+  })
+}
+
 export function getDownloadUrl(objectKey) {
   return request({
     url: '/file/download/url',

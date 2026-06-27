@@ -12,7 +12,6 @@ import com.third.pojo.vo.UserLoginVO;
 import com.third.pojo.vo.UserVO;
 import com.third.service.FileService;
 import com.third.service.UserService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
@@ -24,8 +23,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
-@Slf4j
 public class UserServiceImpl implements UserService {
+    private static final int MIN_PASSWORD_LENGTH = 6;
+    private static final int MAX_BCRYPT_PASSWORD_LENGTH = 72;
 
     @Autowired
     private UserMapper userMapper;
@@ -33,6 +33,30 @@ public class UserServiceImpl implements UserService {
     private FileService fileService;
 
     private static final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+
+    private static String requireUserName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("username must not be blank");
+        }
+        String trimmed = name.trim();
+        if (trimmed.length() > 30) {
+            throw new IllegalArgumentException("username is too long");
+        }
+        if (trimmed.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("username contains invalid characters");
+        }
+        return trimmed;
+    }
+
+    private static String requirePassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("password must not be blank");
+        }
+        if (password.length() < MIN_PASSWORD_LENGTH || password.length() > MAX_BCRYPT_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException("password length must be between 6 and 72 characters");
+        }
+        return password;
+    }
 
 
     /**
@@ -42,15 +66,22 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public void register(UserDTO user) {
+        if (user == null) {
+            throw new IllegalArgumentException("user must not be null");
+        }
+        String name = requireUserName(user.getName());
+        String password = requirePassword(user.getPassword());
+        if (userMapper.getUserInfoByName(name) != null) {
+            throw new UserNameHasExist(RespondCode.NAME_EXIST);
+        }
         User u = new User();
         BeanUtils.copyProperties(user,u);
-        String password = user.getPassword();
         password = encoder.encode(password);
+        u.setName(name);
         u.setPassword(password);
         u.setGmtCreate(LocalDateTime.now());
         u.setGmtModified(LocalDateTime.now());
         u.setLevel(0);
-        log.info(u.toString());
         userMapper.registerUser(u);
     }
 
@@ -62,11 +93,16 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public UserLoginVO login(UserDTO userDTO) {
+        if (userDTO == null) {
+            throw new IllegalArgumentException("user must not be null");
+        }
+        String name = requireUserName(userDTO.getName());
+        String password = requirePassword(userDTO.getPassword());
+        userDTO.setName(name);
         User user = userMapper.login(userDTO);
         if (user == null) {
             throw new UserCountNotExist(RespondCode.NOT_FOUND);
         }
-        String password = userDTO.getPassword();
         if (!encoder.matches(password, user.getPassword())) {
             throw new WrongPassword(RespondCode.NOT_FOUND);
         }
@@ -75,7 +111,7 @@ public class UserServiceImpl implements UserService {
         UserLoginVO loginVO = new UserLoginVO();
         loginVO.setUser(userVO);
         Map<String, Object> map = new HashMap<>();
-        map.put("UserName", userDTO.getName());
+        map.put("UserName", name);
         map.put("userId", user.getId());
         String token = JJWTUtil.createJWT(map);
         loginVO.setToken(token);
@@ -93,7 +129,6 @@ public class UserServiceImpl implements UserService {
         User user = userMapper.getUserInfoById(userId);
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(user,userVO);
-        log.info("userVO:{}", userVO);
         return userVO;
     }
 
@@ -106,7 +141,10 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public UserVO updateUserInfo(UserDTO userDTO, Integer userId) {
-        String name = userDTO.getName();
+        if (userDTO == null) {
+            throw new IllegalArgumentException("user must not be null");
+        }
+        String name = requireUserName(userDTO.getName());
         User user = userMapper.getUserInfoByName(name);
         if (user != null && !user.getId().equals(userId)) {
             throw new UserNameHasExist(RespondCode.NAME_EXIST);
@@ -116,7 +154,6 @@ public class UserServiceImpl implements UserService {
         user = userMapper.getUserInfoById(userId);
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(user,userVO);
-        log.info("userVO:{}", userVO);
         return userVO;
     }
 
@@ -128,6 +165,10 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public void updateUserAvatar(UserDTO userDTO, Integer userId) {
+        if (userDTO == null) {
+            throw new IllegalArgumentException("user must not be null");
+        }
+        FileService.validateObjectKey(userDTO.getObjectKey(), "avatars/");
         User user = userMapper.getUserInfoById(userId);
         String oldKey = user.getImage();
         user.setImage(userDTO.getObjectKey());

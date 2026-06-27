@@ -99,7 +99,7 @@ function getValidExistingKeys() {
 }
 
 function getFiles() {
-  return fileList.value.map((f) => f.raw)
+  return fileList.value.map((f) => f.raw).filter(Boolean)
 }
 
 function clearFiles() {

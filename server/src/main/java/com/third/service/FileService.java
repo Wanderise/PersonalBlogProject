@@ -5,8 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -16,14 +16,18 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
 public class FileService {
+    private static final int MAX_OBJECT_KEY_LENGTH = 255;
+    private static final Pattern SAFE_OBJECT_KEY = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._/-]*$");
+
     @Autowired
     private S3Presigner s3Presigner;
     @Autowired
@@ -32,37 +36,60 @@ public class FileService {
     @Value("${r2.bucket}")
     private String bucketName;
 
-    // 生成R2/S3预签名上传URL，客户端凭此直传文件，10分钟内有效
+    public static void validateObjectKey(String objectKey, String... allowedPrefixes) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException("objectKey must not be blank");
+        }
+        if (objectKey.length() > MAX_OBJECT_KEY_LENGTH) {
+            throw new IllegalArgumentException("objectKey is too long");
+        }
+        if (!SAFE_OBJECT_KEY.matcher(objectKey).matches()
+                || objectKey.contains("..")
+                || objectKey.contains("//")
+                || objectKey.contains("\\")) {
+            throw new IllegalArgumentException("invalid objectKey");
+        }
+        if (allowedPrefixes != null && allowedPrefixes.length > 0
+                && Arrays.stream(allowedPrefixes).noneMatch(objectKey::startsWith)) {
+            throw new IllegalArgumentException("unsupported objectKey prefix");
+        }
+    }
+
+    public static String normalizeContentType(String contentType) {
+        return (contentType == null || contentType.isBlank())
+                ? "application/octet-stream" : contentType.trim();
+    }
+
     public String getUploadPresignedUrl(String objectKey, String contentType) {
-        log.info("getUploadPresignedUrl调用");
+        validateObjectKey(objectKey, "images/", "avatars/", "knowledge_base/");
         PutObjectRequest objectRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
-                .contentType(contentType)
+                .contentType(normalizeContentType(contentType))
                 .build();
-        log.info(objectRequest.toString());
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(10)) // URL 10分钟内有效
+                .signatureDuration(Duration.ofMinutes(10))
                 .putObjectRequest(objectRequest)
                 .build();
-        log.info(presignRequest.toString());
+        log.debug("created upload presigned url for key={}", objectKey);
         return s3Presigner.presignPutObject(presignRequest).url().toString();
     }
 
-    // 生成预签名下载URL，1小时内有效，前端可直接用此URL展示图片
     public String getDownloadPresignedUrl(String objectKey) {
+        validateObjectKey(objectKey, "images/", "avatars/", "knowledge_base/");
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
                 .build();
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofHours(1)) // 下载 URL 有效期1小时
+                .signatureDuration(Duration.ofHours(1))
                 .getObjectRequest(getObjectRequest)
                 .build();
         return s3Presigner.presignGetObject(presignRequest).url().toString();
     }
 
     public void deleteObject(String objectKey) {
+        validateObjectKey(objectKey, "images/", "avatars/", "knowledge_base/");
         DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
@@ -71,7 +98,7 @@ public class FileService {
     }
 
     public void uploadMarkdown(String objectKey, String markdown) {
-
+        validateObjectKey(objectKey, "knowledge_base/");
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
@@ -81,36 +108,33 @@ public class FileService {
     }
 
     public void uploadFile(String objectKey, MultipartFile file) throws IOException {
+        validateObjectKey(objectKey, "images/", "avatars/", "knowledge_base/");
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
-                .contentType(file.getContentType())
+                .contentType(normalizeContentType(file.getContentType()))
                 .build();
 
         long start = System.currentTimeMillis();
-
         s3Client.putObject(
                 request,
-                RequestBody.fromInputStream(
-                        file.getInputStream(),
-                        file.getSize()
-                )
+                RequestBody.fromInputStream(file.getInputStream(), file.getSize())
         );
-
-        log.info("upload cost: {}", System.currentTimeMillis() - start);
-
+        log.debug("uploaded object key={} costMs={}", objectKey, System.currentTimeMillis() - start);
     }
 
     public void uploadFile(String objectKey, byte[] content, String contentType) {
+        validateObjectKey(objectKey, "images/", "avatars/", "knowledge_base/");
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
-                .contentType(contentType)
+                .contentType(normalizeContentType(contentType))
                 .build();
         s3Client.putObject(request, RequestBody.fromBytes(content));
     }
 
     public byte[] downloadObject(String objectKey) {
+        validateObjectKey(objectKey, "images/", "avatars/", "knowledge_base/");
         GetObjectRequest request = GetObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
@@ -118,8 +142,4 @@ public class FileService {
         ResponseBytes<GetObjectResponse> response = s3Client.getObjectAsBytes(request);
         return response.asByteArray();
     }
-
-
-
-
 }

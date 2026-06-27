@@ -252,9 +252,9 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
                 ragFileMapper.insert(ragFile);
 
-                log.info("开始上传R2: {}", safeFilename);
+                log.debug("uploading rag object to storage");
                 fileService.uploadFile(ragFile.getR2Key(), content, file.getContentType());
-                log.info("R2上传完成: {}", safeFilename);
+                log.debug("rag object upload completed");
                 ragJobDispatcher.dispatch(ragFile.getId());
 
                 RagFileVO ragFileVO = new RagFileVO();

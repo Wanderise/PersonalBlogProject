@@ -47,7 +47,7 @@ public class QdrantManager {
 
         try {
             qdrantClient.deleteAsync(deletePoints).get();
-            log.info("Qdrant 删除成功: {}={}", field, value);
+            log.debug("Qdrant delete success: {}={}", field, value);
         } catch (Exception e) {
             log.error("Qdrant 删除失败: {}={}, 原因: {}", field, value, e.getMessage(), e);
             throw new IllegalStateException("Qdrant 删除失败: " + field + "=" + value, e);

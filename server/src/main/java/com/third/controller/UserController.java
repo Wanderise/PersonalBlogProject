@@ -8,12 +8,10 @@ import com.third.pojo.vo.UserVO;
 import com.third.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@Slf4j
 @RequestMapping("/user")
 @Tag(name="用户管理")
 public class UserController {
@@ -46,7 +44,6 @@ public class UserController {
     @Operation(summary = "更新用户信息")
     public Result<UserVO> updateUserInfo(@RequestBody UserDTO userDTO) {
         Integer userId = UserContext.getUserId();
-        log.info("userDTO={}", userDTO);
         UserVO userVO = userService.updateUserInfo(userDTO, userId);
         return Result.success(userVO);
     }
@@ -54,7 +51,6 @@ public class UserController {
     @PutMapping("/avatar")
     public Result updateUserAvatar(@RequestBody UserDTO userDTO) {
         Integer userId = UserContext.getUserId();
-        log.info("userDTO={}", userDTO);
         userService.updateUserAvatar(userDTO, userId);
         return Result.success();
     }

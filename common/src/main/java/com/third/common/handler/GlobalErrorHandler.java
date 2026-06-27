@@ -7,30 +7,35 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalErrorHandler {
 
-    @ExceptionHandler(value = org.springframework.web.multipart.MaxUploadSizeExceededException.class)
-    public ResponseEntity<Result> handleUploadSizeExceeded(org.springframework.web.multipart.MaxUploadSizeExceededException e) {
-        log.error("文件上传超过大小限制: {}", e.getMessage());
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Result<Void>> handleUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        log.warn("upload size limit exceeded: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(Result.error("文件大小超过限制，单文件最大 50MB，请求最大 100MB"));
+                .body(Result.error(HttpStatus.PAYLOAD_TOO_LARGE.value(), "file size exceeds limit"));
     }
 
-    // 业务异常返回其携带的真实HTTP状态码（401/403/404等），而非统一400
-    @ExceptionHandler(value = BaseExcpetion.class)
-    public ResponseEntity<Result> handleException(BaseExcpetion e) {
-      log.error("错误信息：{}", e.getMessage());
-      return ResponseEntity.status(e.getCode()).body(Result.error(e.getCode(), e.getMessage()));
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Result<Void>> handleBadRequest(IllegalArgumentException e) {
+        log.warn("bad request: {}", e.getMessage());
+        return ResponseEntity.badRequest().body(Result.error(HttpStatus.BAD_REQUEST.value(), e.getMessage()));
     }
-    // 兜底处理未预期的运行时异常，统一返回500
-    @ExceptionHandler(value = Exception.class)
-    public ResponseEntity<Result> handleUnknownException(Exception e) {
-        log.error("未捕获异常", e);
+
+    @ExceptionHandler(BaseExcpetion.class)
+    public ResponseEntity<Result<Void>> handleBusinessException(BaseExcpetion e) {
+        log.warn("business error: {}", e.getMessage());
+        return ResponseEntity.status(e.getCode()).body(Result.error(e.getCode(), e.getMessage()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Result<Void>> handleUnknownException(Exception e) {
+        log.error("unhandled exception", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Result.error("服务器内部错误"));
+                .body(Result.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), "internal server error"));
     }
-
 }

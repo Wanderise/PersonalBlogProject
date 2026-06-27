@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
-// JWT工具类，key通过Spring @Value注入，getKey()防御性检查防止未初始化
 @Component
 public class JJWTUtil {
 
@@ -20,10 +19,16 @@ public class JJWTUtil {
 
     @Value("${jwt.secret}")
     public void setSecretKey(String secretKey) {
-        key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+        if (secretKey == null || secretKey.isBlank()) {
+            throw new IllegalStateException("JWT secret must be configured");
+        }
+        byte[] secretBytes = secretKey.getBytes(StandardCharsets.UTF_8);
+        if (secretBytes.length < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 bytes for HS256");
+        }
+        key = Keys.hmacShaKeyFor(secretBytes);
     }
 
-    // 防御性检查，防止Spring注入时序问题导致使用未初始化key
     private static SecretKey getKey() {
         if (key == null) {
             throw new IllegalStateException("JWT secret key not initialized");

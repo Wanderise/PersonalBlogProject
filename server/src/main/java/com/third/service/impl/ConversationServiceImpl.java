@@ -12,7 +12,6 @@ import com.third.pojo.entity.Conversations;
 import com.third.pojo.vo.AIMessageVO;
 import com.third.pojo.vo.ConversationsVO;
 import com.third.service.ConversationService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -31,7 +30,6 @@ import java.util.stream.Collectors;
  * @date 2026/06/14
  */
 @Service
-@Slf4j
 public class ConversationServiceImpl implements ConversationService {
 
     @Autowired
@@ -121,7 +119,6 @@ public class ConversationServiceImpl implements ConversationService {
         wrapper.eq(AIMessage::getConversationId, id)
                 .orderByAsc(AIMessage::getGmtCreate);
         List<AIMessage> aiMessages = messageMapper.selectList(wrapper);
-        log.info("aiMessageInfo:{}", aiMessages);
         return aiMessages.stream().map(message ->
                 "user".equals(message.getRole())
                         ? new UserMessage(message.getContent())

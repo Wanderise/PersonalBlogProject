@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getUserInfo, updateUserInfo, updateAvatar, updatePassword } from '@/api/auth.js'
-import { getUploadUrl, getDownloadUrl } from '@/api/file.js'
+import { uploadObject, getDownloadUrl } from '@/api/file.js'
 import { useAuth } from '@/composables/useAuth.js'
 
 const { loadAvatar, updateLocalUser } = useAuth()
@@ -101,11 +101,15 @@ async function handleAvatarChange(file) {
   avatarUploading.value = true
   try {
     const objectKey = `avatars/${user.id}_${Date.now()}.${file.name.split('.').pop()}`
-    const { data } = await getUploadUrl({ objectKey, contentType: file.type })
-    await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-    await updateAvatar(objectKey)
-    updateLocalUser({ image: objectKey })
-    const { data: dlData } = await getDownloadUrl(objectKey)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('objectKey', objectKey)
+    formData.append('contentType', file.type || 'application/octet-stream')
+    const { data } = await uploadObject(formData)
+    const uploadedKey = data.objectKey || objectKey
+    await updateAvatar(uploadedKey)
+    updateLocalUser({ image: uploadedKey })
+    const { data: dlData } = await getDownloadUrl(uploadedKey)
     user.image = dlData.downloadUrl
     await loadAvatar()
     ElMessage.success('头像更新成功')

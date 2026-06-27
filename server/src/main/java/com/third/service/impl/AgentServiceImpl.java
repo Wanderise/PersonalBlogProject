@@ -7,7 +7,6 @@ import com.third.pojo.dto.AgentDTO;
 import com.third.pojo.entity.Agent;
 import com.third.pojo.vo.AgentVO;
 import com.third.service.AgentService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
@@ -19,7 +18,6 @@ import java.util.List;
 import java.util.Objects;
 
 @Service
-@Slf4j
 public class AgentServiceImpl implements AgentService {
 
     @Autowired

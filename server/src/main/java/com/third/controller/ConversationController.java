@@ -48,23 +48,19 @@ public class ConversationController {
     public Result<List<ConversationsVO>> getConversations() {
         Integer userId = UserContext.getUserId();
         List<ConversationsVO> conversations = conversationService.getConversations(userId);
-        log.info("getConversations: {}", conversations);
         return Result.success(conversations);
     }
 
     @PostMapping("/conversations")
     public Result<ConversationsVO> addConversation(@RequestBody ConversationsDTO conversationsDTO) {
         Integer userId = UserContext.getUserId();
-        log.info("addConversation: {}", conversationsDTO);
         ConversationsVO conversationsVO = conversationService.addConversation(conversationsDTO, userId);
-        log.info("conversationsVO: {}", conversationsVO);
         return Result.success(conversationsVO);
     }
 
     @PutMapping("/conversations/{id}")
     public Result updateConversation(@PathVariable Integer id, @RequestBody ConversationsDTO conversationsDTO) {
         Integer userId = UserContext.getUserId();
-        log.info("updateConversation: {}", id);
         conversationService.changeConversationName(id, conversationsDTO, userId);
         return Result.success();
     }
@@ -72,7 +68,6 @@ public class ConversationController {
     @DeleteMapping("/conversations/{id}")
     public Result<ConversationsVO> deleteConversation(@PathVariable Integer id) {
         Integer userId = UserContext.getUserId();
-        log.info("deleteConversation: {}", id);
         conversationService.deleteConversation(id, userId);
         return Result.success();
     }
@@ -80,7 +75,6 @@ public class ConversationController {
     @GetMapping("/conversations/{id}/messages")
     public Result<List<AIMessageVO>> getConversationMessages(@PathVariable Integer id) {
         Integer userId = UserContext.getUserId();
-        log.info("getConversationMessages: {}", id);
         List<AIMessageVO> messages = conversationService.getConversationMessagesVO(id, userId);
         return Result.success(messages);
     }
@@ -115,8 +109,6 @@ public class ConversationController {
                 """.formatted(systemPrompt, ragPrompt, message);
 
         List<Message> messages = conversationService.getConversationMessages(conversationId, userId);
-
-        log.info("提示词：{} \n 上下文：{}", prompt, messages);
 
         conversationService.saveUserMessage(message, conversationId, userId);
         AtomicReference<String> fullResponse = new AtomicReference<>("");

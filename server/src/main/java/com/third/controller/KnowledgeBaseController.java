@@ -7,7 +7,6 @@ import com.third.pojo.dto.RagFileDTO;
 import com.third.pojo.vo.KnowledgeBaseVO;
 import com.third.pojo.vo.RagFileVO;
 import com.third.service.KnowledgeBaseService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -15,7 +14,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
-@Slf4j
 @RequestMapping("/ai")
 @RestController
 public class KnowledgeBaseController {
@@ -26,7 +24,6 @@ public class KnowledgeBaseController {
     @PostMapping("/knowledge-bases")
     public Result<KnowledgeBaseVO> addKnowledgeBase(@RequestBody KnowledgeBaseDTO knowledgeBaseDTO) {
         Integer userId = UserContext.getUserId();
-        log.info("addKnowledgeBase: {}", knowledgeBaseDTO);
         KnowledgeBaseVO knowledgeBaseVO = knowledgeBaseService.addKnowledgeBase(knowledgeBaseDTO, userId);
         return Result.success(knowledgeBaseVO);
     }
@@ -73,7 +70,6 @@ public class KnowledgeBaseController {
         RagFileDTO ragFileDTO = new RagFileDTO();
         ragFileDTO.setFiles(files);
         ragFileDTO.setKnowledgeBaseId(knowledgeBaseId);
-        log.info("uploadRagFile: {}", ragFileDTO);
         List<RagFileVO> ragFileVOList = knowledgeBaseService.uploadRagFile(ragFileDTO, userId);
         return Result.success(ragFileVOList);
     }
@@ -81,7 +77,6 @@ public class KnowledgeBaseController {
     @PostMapping("/rag/articles")
     public Result<List<RagFileVO>> uploadRagArticles(@RequestBody RagFileDTO ragFileDTO) {
         Integer userId = UserContext.getUserId();
-        log.info("uploadRagArticles: {}", ragFileDTO);
         List<RagFileVO> ragFileVOList = knowledgeBaseService.uploadRagArticle(ragFileDTO, userId);
         return Result.success(ragFileVOList);
     }

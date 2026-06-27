@@ -19,7 +19,6 @@ import com.third.pojo.vo.ArticleVersionVO;
 import com.third.service.ArticleService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.third.service.FileService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
@@ -37,7 +36,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
-@Slf4j
 public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArticleService {
 
     @Autowired
@@ -173,7 +171,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         articleVersion.setTag(JSON.toJSONString(tags));
         articleVersion.setArticleId(article.getId());
         articleVersion.setGmtCreate(LocalDate.now());
-        log.info("updating aritcle: {}", articleVersion);
         articleVersionMapper.addArticleVersion(articleVersion);
 
     }
@@ -197,7 +194,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         article.setGmtCreate(LocalDateTime.now());
         article.setGmtModified(LocalDateTime.now());
         article.setWriterId(userId);
-        log.info("article:{}", article);
 
         articleMapper.addArticle(article);
         Integer articleId = article.getId();
@@ -220,7 +216,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public ArticleVO getArticleById(Integer id) {
         Article article = articleMapper.getArticleById(id);
         ArticleVO articleVO = articleToVO(article);
-        log.info("articleVO:{}", articleVO);
         return articleVO;
     }
 
@@ -238,10 +233,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         PageHelper.startPage(page, size);
         List<Article> articles = articleMapper.getArticleList(tag, keyword);
         PageInfo<Article> pageInfo = new PageInfo<>(articles);
-        log.info("Articles:{}", articles);
-        ArticleListVO result = buildArticleListVO(pageInfo);
-        log.info("articleListVO:{}", result);
-        return result;
+        return buildArticleListVO(pageInfo);
     }
 
     /**
@@ -302,7 +294,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             article.setVersion(BigDecimal.valueOf(oldVersion).add(new BigDecimal("0.1")).doubleValue());
         article.setImage(JSON.toJSONString(articleAddDTO.getImage()));
         article.setGmtModified(LocalDateTime.now());
-        log.info("updating_article:{}", article);
         articleMapper.updateArticle(article);
         articleMapper.deleteArticleTagById(id);
         List<String> tags = articleAddDTO.getTag();
@@ -324,10 +315,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         PageHelper.startPage(page, size);
         List<Article> articles = articleMapper.getMyArticleList(userId);
         PageInfo<Article> pageInfo = new PageInfo<>(articles);
-        log.info("articles:{}", articles);
-        ArticleListVO result = buildArticleListVO(pageInfo);
-        log.info("articleListVO:{}", result);
-        return result;
+        return buildArticleListVO(pageInfo);
     }
 
     /**

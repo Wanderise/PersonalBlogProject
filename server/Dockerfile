@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 ARG DOCKER_IMAGE_PREFIX=
 FROM ${DOCKER_IMAGE_PREFIX}library/maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /workspace
@@ -5,11 +6,11 @@ COPY pom.xml ./
 COPY common/pom.xml common/pom.xml
 COPY pojo/pom.xml pojo/pom.xml
 COPY server/pom.xml server/pom.xml
-RUN mvn -pl server -am dependency:go-offline -DskipTests
+RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -pl server -am dependency:resolve -DskipTests
 COPY common/src common/src
 COPY pojo/src pojo/src
 COPY server/src server/src
-RUN mvn -pl server -am package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 mvn -B -nsu -pl server -am package -DskipTests
 
 FROM ${DOCKER_IMAGE_PREFIX}library/eclipse-temurin:17-jre
 WORKDIR /app

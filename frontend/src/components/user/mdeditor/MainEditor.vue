@@ -77,12 +77,10 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import axios from 'axios'
-import { v4 as uuidv4 } from 'uuid'
 import { Upload, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { uploadArticleRequest, getArticleById, updateArticle } from '@/api/article.js'
-import { getUploadUrl } from '@/api/file.js'
+import { uploadObject } from '@/api/file.js'
 import ImageUploader from '@/components/user/mdeditor/ImageUploader.vue'
 
 const route = useRoute()
@@ -109,6 +107,22 @@ const uploadPercent = computed(() => {
   if (totalCount.value === 0) return 0
   return Math.round((uploadedCount.value / totalCount.value) * 100)
 })
+
+function createImageKey(file) {
+  const ext = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
+  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `images/${id}.${ext}`
+}
+
+async function uploadImage(file) {
+  const objectKey = createImageKey(file)
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('objectKey', objectKey)
+  formData.append('contentType', file.type || 'application/octet-stream')
+  const res = await uploadObject(formData)
+  return res.data.objectKey || objectKey
+}
 
 onMounted(async () => {
   if (isEdit) {
@@ -141,9 +155,7 @@ async function submit() {
       uploadedCount.value = 0
 
       const tasks = files.map(async (file) => {
-        const objectKey = `images/${uuidv4()}.${file.name.split('.').pop()}`
-        const urlRes = await getUploadUrl({ objectKey, contentType: file.type })
-        await axios.put(urlRes.data.uploadUrl, file, { headers: { 'Content-Type': file.type } })
+        const objectKey = await uploadImage(file)
         uploadedCount.value++
         return objectKey
       })

@@ -1,0 +1,14 @@
+**
+!pom.xml
+!common/
+!common/pom.xml
+!common/src/
+!common/src/**
+!pojo/
+!pojo/pom.xml
+!pojo/src/
+!pojo/src/**
+!server/
+!server/pom.xml
+!server/src/
+!server/src/**
